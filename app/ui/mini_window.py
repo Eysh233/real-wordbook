@@ -51,7 +51,9 @@ class MiniWindow(QWidget):
         word_font.setPixelSize(theme.fs(23))
         word_font.setWeight(QFont.DemiBold)
         self._word.setFont(word_font)
-        self._word.setStyleSheet("color: %s;" % theme.css("ink"))
+        self._word.setStyleSheet(
+            "color: %s; %s" % (theme.css("ink"), theme.font_css(23, theme.SERIF, 600))
+        )
         root.addWidget(self._word)
 
         self._meaning = QLabel("")

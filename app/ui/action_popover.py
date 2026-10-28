@@ -55,7 +55,9 @@ class ActionPopover(QFrame):
         font.setPixelSize(theme.fs(19))
         font.setWeight(QFont.DemiBold)
         self._title.setFont(font)
-        self._title.setStyleSheet("color: %s;" % theme.css("ink"))
+        self._title.setStyleSheet(
+            "color: %s; %s" % (theme.css("ink"), theme.font_css(19, theme.SERIF, 600))
+        )
         header.addWidget(self._title)
         self._phonetic = QLabel("")
         self._phonetic.setObjectName("faint")

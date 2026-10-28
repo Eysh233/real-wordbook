@@ -122,7 +122,9 @@ class CardSession(QWidget):
         self._word.setFont(word_font)
         self._word.setAlignment(Qt.AlignCenter)
         self._word.setWordWrap(True)
-        self._word.setStyleSheet("color: %s;" % theme.css("ink"))
+        self._word.setStyleSheet(
+            "color: %s; %s" % (theme.css("ink"), theme.font_css(62, theme.SERIF, 600))
+        )
         root.addWidget(self._word)
 
         self._phonetic = QLabel("")
@@ -131,7 +133,9 @@ class CardSession(QWidget):
         phon_font.setItalic(True)
         self._phonetic.setFont(phon_font)
         self._phonetic.setAlignment(Qt.AlignCenter)
-        self._phonetic.setStyleSheet("color: %s;" % theme.css("ink_faint"))
+        self._phonetic.setStyleSheet(
+            "color: %s; %s" % (theme.css("ink_faint"), theme.font_css(15, theme.SERIF, italic=True))
+        )
         root.addWidget(self._phonetic)
 
         root.addSpacing(theme.scale(8))
@@ -149,7 +153,9 @@ class CardSession(QWidget):
         self._meaning.setFont(mean_font)
         self._meaning.setAlignment(Qt.AlignCenter)
         self._meaning.setWordWrap(True)
-        self._meaning.setStyleSheet("color: %s;" % theme.css("ink"))
+        self._meaning.setStyleSheet(
+            "color: %s; %s" % (theme.css("ink"), theme.font_css(25, theme.SANS))
+        )
         self._meaning.hide()
         reveal_layout.addWidget(self._meaning)
 
@@ -160,7 +166,9 @@ class CardSession(QWidget):
         self._example.setFont(ex_font)
         self._example.setAlignment(Qt.AlignCenter)
         self._example.setWordWrap(True)
-        self._example.setStyleSheet("color: %s;" % theme.css("ink_soft"))
+        self._example.setStyleSheet(
+            "color: %s; %s" % (theme.css("ink_soft"), theme.font_css(14, theme.SERIF, italic=True))
+        )
         self._example.hide()
         reveal_layout.addWidget(self._example)
         reveal_layout.addStretch(1)

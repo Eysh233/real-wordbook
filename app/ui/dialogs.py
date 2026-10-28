@@ -57,6 +57,7 @@ class AddWordDialog(QDialog):
         f = QFont(theme.SERIF)
         f.setPixelSize(theme.fs(18))
         self._word_edit.setFont(f)
+        self._word_edit.setStyleSheet(theme.font_css(18, theme.SERIF))
         root.addWidget(self._field("单词", self._word_edit))
 
         self._meaning_edit = QLineEdit(self)
@@ -321,6 +322,7 @@ class SpellingDialog(QDialog):
         prompt_font = QFont(theme.SANS)
         prompt_font.setPixelSize(theme.fs(20))
         self._prompt.setFont(prompt_font)
+        self._prompt.setStyleSheet(theme.font_css(20, theme.SANS))
         self._prompt.setWordWrap(True)
         self._prompt.setAlignment(Qt.AlignCenter)
         self._prompt.setMinimumHeight(theme.scale(70))
@@ -336,6 +338,7 @@ class SpellingDialog(QDialog):
         input_font = QFont(theme.SERIF)
         input_font.setPixelSize(theme.fs(19))
         self._input.setFont(input_font)
+        self._input.setStyleSheet(theme.font_css(19, theme.SERIF))
         self._input.setAlignment(Qt.AlignCenter)
         self._input.returnPressed.connect(self._submit)
         root.addWidget(self._input)

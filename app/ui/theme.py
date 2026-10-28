@@ -114,6 +114,22 @@ def fs(px: float) -> int:
     return max(1, int(round(px * _scale * FONT_BOOST)))
 
 
+def font_css(px: float, family: str = None, weight: int = None, italic: bool = False) -> str:
+    """控件内联样式里的字体声明。
+
+    QSS 的 `QLabel { font-size: ... }` 会盖掉 setFont()/setPixelSize()，
+    所以凡是要和全局字号不同的标签，必须把 font-size 写进它自己的 stylesheet。
+    """
+    parts = ["font-size: %dpx;" % fs(px)]
+    if family:
+        parts.append("font-family: '%s';" % family)
+    if weight:
+        parts.append("font-weight: %d;" % weight)
+    if italic:
+        parts.append("font-style: italic;")
+    return " ".join(parts)
+
+
 def tokens() -> Dict[str, str]:
     return THEMES[_current]
 
