@@ -264,6 +264,11 @@ class _TagRow(QWidget):
         self._current = current
         self._hover = False
 
+    def set_current(self, current: bool) -> None:
+        if self._current != current:
+            self._current = current
+            self.update()
+
     def set_hover(self, hover: bool) -> None:
         if self._hover != hover:
             self._hover = hover
@@ -313,10 +318,15 @@ class _TagRow(QWidget):
 class _TagPopup(QFrame):
     """菜单浮层：材质卡片 + 从按钮原点弹出 + 逐项错峰出现。"""
 
+    picked = pyqtSignal(str)
+    closed = pyqtSignal()
+
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent, Qt.Popup | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setFocusPolicy(Qt.StrongFocus)
         self._rows: List[_TagRow] = []
+        self._index = 0
 
         self._panel = QFrame(self)
         self._panel.setObjectName("tagPanel")
@@ -324,14 +334,6 @@ class _TagPopup(QFrame):
             "QFrame#tagPanel { background: %s; border: 1px solid %s; border-radius: 12px; }"
             % (theme.css("popover"), theme.css("rule"))
         )
-        shadow = QGraphicsDropShadowEffect(self._panel)
-        shadow.setBlurRadius(theme.scale(22))
-        shadow.setOffset(0, theme.scale(6))
-        color = QColor(30, 24, 16)
-        color.setAlpha(90)
-        shadow.setColor(color)
-        self._panel.setGraphicsEffect(shadow)
-
         outer = QVBoxLayout(self)
         outer.setContentsMargins(theme.scale(8), theme.scale(8), theme.scale(8), theme.scale(8))
         outer.addWidget(self._panel)
@@ -340,27 +342,101 @@ class _TagPopup(QFrame):
         self._box.setContentsMargins(theme.scale(4), theme.scale(5), theme.scale(4), theme.scale(5))
         self._box.setSpacing(theme.scale(1))
 
+    # ------------------------------------------------------------------ 内容
     def build(self, items: Sequence[Tuple[str, str, int]], current: str) -> None:
         for row in self._rows:
             row.setParent(None)
             row.deleteLater()
         self._rows = []
 
-        for value, label, count in items:
+        for index, (value, label, count) in enumerate(items):
             row = _TagRow(label, count, value == current, self._panel)
             row.setProperty("tagValue", value)
             row.installEventFilter(self)
-            row.setCursor(Qt.PointingHandCursor)
             self._box.addWidget(row)
             self._rows.append(row)
+            if value == current and value:
+                self._index = index
+
+        self._mark()
         self.adjustSize()
 
+    def _mark(self) -> None:
+        for index, row in enumerate(self._rows):
+            row.set_current(index == self._index)
+
     def play_in(self) -> None:
-        motion.pop_in(self, (0.5, 0.0), start_scale=0.97, lift=6.0)
+        end = self.pos()
+        start = QPoint(end.x(), end.y() - theme.scale(6))
+        if motion.reduced():
+            self.setWindowOpacity(1.0)
+            return
+        self.move(start)
+        self.setWindowOpacity(0.0)
+        fade = QPropertyAnimation(self, b"windowOpacity", self)
+        fade.setDuration(motion.ms(motion.POP_MS))
+        fade.setStartValue(0.0)
+        fade.setEndValue(1.0)
+        fade.setEasingCurve(motion.EASE_OUT)
+        fade.start()
+        slide = QPropertyAnimation(self, b"pos", self)
+        slide.setDuration(motion.ms(motion.POP_MS))
+        slide.setStartValue(start)
+        slide.setEndValue(end)
+        slide.setEasingCurve(motion.EASE_OUT)
+        slide.start()
+        self._anims = (fade, slide)
+
+    def play_out(self, on_done) -> None:
+        if motion.reduced():
+            on_done()
+            return
+        fade = QPropertyAnimation(self, b"windowOpacity", self)
+        fade.setDuration(motion.ms(motion.POP_OUT_MS))
+        fade.setStartValue(self.windowOpacity())
+        fade.setEndValue(0.0)
+        fade.setEasingCurve(motion.EASE_IN)
+        fade.finished.connect(on_done)
+        fade.start()
+        self._anims = (fade,)
+
+    # ------------------------------------------------------------------ 交互
+    def eventFilter(self, obj, event):  # noqa: N802
+        if obj in self._rows:
+            kind = event.type()
+            if kind == event.Enter:
+                obj.set_hover(True)
+            elif kind == event.Leave:
+                obj.set_hover(False)
+            elif kind == event.MouseButtonRelease and event.button() == Qt.LeftButton:
+                if obj.rect().contains(event.pos()):
+                    self.picked.emit(str(obj.property("tagValue") or ""))
+                return True
+        return super().eventFilter(obj, event)
+
+    def keyPressEvent(self, event):  # noqa: N802
+        key = event.key()
+        if key in (Qt.Key_Escape, Qt.Key_Tab):
+            self.hide()
+            return
+        if key in (Qt.Key_Return, Qt.Key_Enter, Qt.Key_Space):
+            if self._rows:
+                self.picked.emit(str(self._rows[self._index].property("tagValue") or ""))
+            return
+        if key in (Qt.Key_Down, Qt.Key_Up) and self._rows:
+            step = 1 if key == Qt.Key_Down else -1
+            self._index = (self._index + step) % len(self._rows)
+            self._mark()
+            return
+        super().keyPressEvent(event)
+
+    def hideEvent(self, event):  # noqa: N802
+        super().hideEvent(event)
+        self.closed.emit()
 
 
 class TagMenu(QPushButton):
-    """标签筛选：按钮 + 自绘菜单（替代 QComboBox）。点击从按钮下方弹出。"""
+    """标签筛选：按钮 + 自绘菜单（替代 QComboBox）。菜单贴在按钮正下方。"""
 
     tagChanged = pyqtSignal(str)
 
@@ -369,11 +445,11 @@ class TagMenu(QPushButton):
         self.setObjectName("field")
         self.setCursor(Qt.PointingHandCursor)
         self.setMinimumWidth(theme.scale(96))
-        self.setMaximumWidth(theme.scale(152))
+        self.setMaximumWidth(theme.scale(168))
         self._items: List[Tuple[str, str, int]] = [("", "全部标签", 0)]
         self._value = ""
         self._popup = None
-        self._style()
+        self.setStyleSheet("font-size: %dpx;" % theme.fs(12))
         self._render_label()
         self.clicked.connect(self._toggle)
 
@@ -401,10 +477,7 @@ class TagMenu(QPushButton):
             if value and value == self._value:
                 label = text
                 break
-        self.setText("%s  ▾" % label)
-
-    def _style(self) -> None:
-        self.setStyleSheet("font-size: %dpx;" % theme.fs(12))
+        self.setText("%s  \u25be" % label)
 
     # ------------------------------------------------------------------ 展开
     def _toggle(self) -> None:
@@ -414,66 +487,46 @@ class TagMenu(QPushButton):
         self._open()
 
     def _open(self) -> None:
-        window = self.window()
-        popup = _TagPopup(window)
+        popup = _TagPopup(self.window())
         popup.build(self._items, self._value)
+        popup.picked.connect(self._apply)
+        popup.closed.connect(self._on_closed)
         self._popup = popup
 
-        size = popup.sizeHint()
-        origin = self.mapTo(window, QPoint(0, 0))
-        x = origin.x()
-        y = origin.y() + self.height() + theme.scale(6)
-        bottom = origin.y() + self.height()
-        if x + size.width() > window.width() - theme.scale(8):
-            x = max(theme.scale(8), window.width() - size.width() - theme.scale(8))
-        if y + size.height() > window.height() - theme.scale(8):
-            y = max(theme.scale(8), origin.y() - size.height() - theme.scale(6))
+        popup.adjustSize()
+        size = popup.size()
+        anchor = self.mapToGlobal(QPoint(0, 0))
+        screen = QApplication.screenAt(anchor) or QApplication.primaryScreen()
+        area = screen.availableGeometry()
+
+        x = anchor.x()
+        y = anchor.y() + self.height() + theme.scale(6)
+        if x + size.width() > area.right() - theme.scale(8):
+            x = area.right() - theme.scale(8) - size.width()
+        if y + size.height() > area.bottom() - theme.scale(8):
+            y = anchor.y() - size.height() - theme.scale(6)
+        x = max(area.left() + theme.scale(8), x)
+        y = max(area.top() + theme.scale(8), y)
+
         popup.move(int(x), int(y))
         popup.show()
         popup.setFocus()
         popup.play_in()
-        self._hook(popup)
 
-    def _hook(self, popup: _TagPopup) -> None:
-        popup.keyPressEvent = lambda event: self._key(event, popup)  # type: ignore[assignment]
-        for row in popup._rows:
-            row.mousePressEvent = lambda event, r=row: self._pick(r)  # type: ignore[assignment]
-
-    def _pick(self, row: _TagRow) -> None:
-        value = row.property("tagValue") or ""
+    def _apply(self, value: str) -> None:
         self._close()
+        value = value or ""
         if value != self._value:
             self._value = value
             self._render_label()
             self.tagChanged.emit(self._value)
 
-    def _key(self, event, popup: _TagPopup) -> None:
-        key = event.key()
-        if key in (Qt.Key_Escape, Qt.Key_Tab):
-            self._close()
-            return
-        values = [str(row.property("tagValue") or "") for row in popup._rows]
-        if not values:
-            return
-        if key in (Qt.Key_Return, Qt.Key_Enter):
-            for row in popup._rows:
-                if (row.property("tagValue") or "") == self._value:
-                    self._pick(row)
-                    return
-            self._pick(popup._rows[0])
-            return
-        if key in (Qt.Key_Down, Qt.Key_Up):
-            index = values.index(self._value) if self._value in values else -1
-            step = 1 if key == Qt.Key_Down else -1
-            self._value = values[(index + step) % len(values)]
-            self._render_label()
-            for row in popup._rows:
-                row._current = (row.property("tagValue") or "") == self._value
-                row.update()
+    def _on_closed(self) -> None:
+        self._popup = None
 
     def _close(self) -> None:
         popup = self._popup
         self._popup = None
         if popup is None:
             return
-        motion.pop_out(popup, on_done=popup.close)
+        popup.play_out(popup.close)

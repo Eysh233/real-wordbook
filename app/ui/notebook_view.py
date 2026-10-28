@@ -196,15 +196,24 @@ class NotebookView(QWidget):
         return self._clamp01((p - delay) / span)
 
     def _layer_tint(self, layer: str) -> tuple:
-        """返回 (透明度, 水平位移)。"""
+        """返回 (透明度, 水平位移)。
+
+        出相：旧页从满透明度走到 0，并沿翻页方向移开；
+        入相：新页从 0 走到满透明度，从翻页方向的反侧滑回原位。
+        """
+        if self._turn_mode == "idle":
+            return 1.0, 0.0
         progress = self._layer_progress(layer)
-        strength = progress if self._turn_mode == "in" else 1.0 - progress
-        amplitude = {"paper": 9.0, "content": 20.0, "footer": 5.0}.get(layer, 12.0)
-        return progress, -self._turn_dir * amplitude * (1.0 - progress)
+        amplitude = {"paper": 4.0, "content": 22.0, "footer": 8.0}.get(layer, 12.0)
+        # 纸面几乎不淡，只轻轻让位；真正动的是内容与页脚，避免整页化成一片糊
+        floor = {"paper": 1.0, "content": 0.22, "footer": 0.45}.get(layer, 0.3)
+        if self._turn_mode == "in":
+            alpha = floor + (1.0 - floor) * progress
+            return alpha, self._turn_dir * amplitude * (1.0 - progress)
+        alpha = 1.0 - (1.0 - floor) * progress
+        return alpha, -self._turn_dir * amplitude * progress
 
     def _hide_cells(self, hidden: bool) -> None:
-        if self._cells_hidden == hidden:
-            return
         self._cells_hidden = hidden
         for cell in self._cells:
             cell.setVisible(not hidden)
@@ -263,6 +272,10 @@ class NotebookView(QWidget):
                     cell.clicked.connect(self.wordClicked.emit)
                     cell.show()
                     self._cells.append(cell)
+        # 翻页过渡期重建的词格必须保持隐藏，否则会和 _paint_words 叠成重影
+        if self._cells_hidden:
+            for cell in self._cells:
+                cell.hide()
         self._layout_cells()
         self._sync_buttons()
 
@@ -314,14 +327,14 @@ class NotebookView(QWidget):
         alpha, dx = self._layer_tint("paper")
         painter.save()
         painter.setOpacity(alpha)
-        painter.translate(dx, 0)
+        painter.translate(int(round(dx)), 0)
         self._paint_sheet(painter)
         painter.restore()
 
         alpha, dx = self._layer_tint("content")
         painter.save()
         painter.setOpacity(alpha)
-        painter.translate(dx, 0)
+        painter.translate(int(round(dx)), 0)
         if page:
             self._paint_rows(painter, page)
             if turning:
@@ -335,7 +348,7 @@ class NotebookView(QWidget):
             alpha, dx = self._layer_tint("footer")
             painter.save()
             painter.setOpacity(alpha)
-            painter.translate(dx, 0)
+            painter.translate(int(round(dx)), 0)
             self._paint_footer(painter)
             painter.restore()
 
