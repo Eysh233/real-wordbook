@@ -18,8 +18,13 @@ class WordCell(QWidget):
         self.mode = mode
         self._hover = False
         self._hover_t = 0.0
+        self._hover_target = 0.0
         self._pressed = False
         self._selected = False
+        self._hover_anim = QVariantAnimation(self)
+        self._hover_anim.setEasingCurve(motion.EASE_OUT)
+        self._hover_anim.valueChanged.connect(self._set_hover)
+        self._hover_anim.finished.connect(self._snap_hover)
         self.setCursor(Qt.PointingHandCursor)
         self.setAttribute(Qt.WA_Hover, True)
         self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
@@ -54,30 +59,38 @@ class WordCell(QWidget):
 
     # ---------------------------------------------------------------- 交互
     def enterEvent(self, event):  # noqa: N802
-        self._hover = True
-        self._hover_t = 0.0
-        self._animate_hover(1.0)
+        self.set_hovered(True)
         super().enterEvent(event)
 
     def leaveEvent(self, event):  # noqa: N802
-        self._hover = False
         self._pressed = False
-        self._animate_hover(0.0)
+        self.set_hovered(False)
         super().leaveEvent(event)
 
+    def set_hovered(self, hovered: bool) -> None:
+        """显式的悬停状态：鼠标进出、翻页重建、窗口失焦都走这里。
+
+        只保留一条动画并复用，避免快速划过时「旧动画还在跑、新动画又启动」
+        把 `_hover_t` 停在 1.0，让词格一直亮着。
+        """
+        self._hover = hovered
+        self._animate_hover(1.0 if hovered else 0.0)
+
     def _animate_hover(self, target: float) -> None:
-        if motion.reduced():
-            self._hover_t = target
-            self.update()
+        self._hover_target = target
+        anim = self._hover_anim
+        anim.stop()
+        if motion.reduced() or abs(self._hover_t - target) < 0.01:
+            self._set_hover(target)
             return
-        anim = QVariantAnimation(self)
-        anim.setDuration(motion.HOVER_MS)
+        anim.setDuration(motion.ms(motion.HOVER_MS))
         anim.setStartValue(float(self._hover_t))
         anim.setEndValue(float(target))
-        anim.setEasingCurve(motion.EASE_OUT)
-        anim.valueChanged.connect(self._set_hover)
         anim.start()
-        self._hover_anim = anim
+
+    def _snap_hover(self) -> None:
+        # 动画结束时精确落位，避免缓动尾巴留下 0.02 之类的残值
+        self._set_hover(self._hover_target)
 
     def _set_hover(self, value) -> None:
         self._hover_t = float(value)

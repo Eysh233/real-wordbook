@@ -240,6 +240,14 @@ class NotebookView(QWidget):
         if value != self._cell_shift:
             self._cell_shift = value
             self._content.move(value, 0)
+            # 内容层在静止的鼠标下滑走时，Qt 不保证补发 leaveEvent，
+            # 这里主动收掉悬停，避免划过的词格一直亮着。
+            self._clear_hover()
+
+    def _clear_hover(self) -> None:
+        for cell in self._cells:
+            if getattr(cell, "_hover", False):
+                cell.set_hovered(False)
 
     def _clear_turn(self) -> None:
         self._turn_mode = "idle"
@@ -247,6 +255,14 @@ class NotebookView(QWidget):
         self._cell_shift = 0
         self._layout_cells()
         self.update()
+
+    def leaveEvent(self, event):  # noqa: N802
+        self._clear_hover()
+        super().leaveEvent(event)
+
+    def hideEvent(self, event):  # noqa: N802
+        self._clear_hover()
+        super().hideEvent(event)
 
     # ---------------------------------------------------------------- 布局
     def _paper_rect(self) -> QRectF:
