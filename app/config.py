@@ -32,6 +32,17 @@ AI_CACHE_FILE = DATA_DIR / "ai_cache.json"
 STATS_FILE = DATA_DIR / "stats.json"
 SECRET_FILE = USER_DIR / "config.json"
 
+
+def resource_path(name: str) -> Path:
+    """取随包发布的资源（图标等）。
+
+    源码运行时在 assets/；PyInstaller 打包后资源被塞进 _MEIPASS。
+    """
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        return Path(base) / name
+    return APP_DIR / "assets" / name
+
 # ---------------------------------------------------------------- 版面
 ROWS_PER_PAGE = 9
 WORDS_PER_ROW = 5

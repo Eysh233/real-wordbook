@@ -58,7 +58,7 @@ class SettingsDialog(QDialog):
         self._key_input.setPlaceholderText("sk-…（留空表示沿用已保存的 Key）")
         existing = secret.api_key
         if existing:
-            self._key_input.setPlaceholderText("已保存 %s，留空则不修改" % secret.mask())
+            self._key_input.setPlaceholderText("已保存 %s，留空则不修改" % secret.mask(existing))
         key_row = QHBoxLayout()
         key_row.setSpacing(8)
         key_row.addWidget(self._key_input, 1)

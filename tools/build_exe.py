@@ -1,12 +1,17 @@
-"""把程序打包成单文件 exe。
+"""把程序打包成 release/RealWordbook/ 下的可执行目录。
 
 用法：python tools/build_exe.py
-产物：release/RealWordbook.exe（release/ 与 build/ 都不进仓库）
+产物：release/RealWordbook/RealWordbook.exe（release/ 与 build/ 都不进仓库）
 
 说明：
-- 用 PyInstaller 的 onefile 模式，PyQt5 的运行时会被塞进同一个 exe，
-  首次启动会解包到 %TEMP%\\_MEIxxxx，因此启动比直接跑 .py 慢一两秒。
-- --windowed 表示不带黑框控制台；调试时改成 --console 可以看到报错。
+- 用 PyInstaller 的 onedir 模式：启动快、依赖放在同目录的 _internal/ 里，
+  整个 release/RealWordbook/ 文件夹一起拷走即可运行。
+  想要「一个文件」就把 --onedir 换成 --onefile，并补上
+  `--runtime-tmpdir .`（onefile 默认解包到 %TEMP%，受限环境里会失败）。
+- --windowed 表示不带黑框控制台；调试时改成 --console 可以看到报错，
+  正式版也可以查 data/crash.log（main.py 里装了 excepthook）。
+- 图标：assets/app.ico（tools/make_icon.py 生成）既作为 exe 图标，
+  也通过 --add-data 打进包里，供窗口图标使用。
 - exe 旁边的 data/、StudyBook/、StudyRecord/ 才是真正读写的位置
   （config.py 里对 frozen 状态做了判断）。
 """
@@ -18,6 +23,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RELEASE = ROOT / "release"
 BUILD = ROOT / "build" / "pyinstaller"
+ASSETS = ROOT / "assets"
 
 EXCLUDES = [
     "tkinter",
@@ -60,7 +66,7 @@ def main() -> int:
         "PyInstaller",
         "--noconfirm",
         "--clean",
-        "--onefile",
+        "--onedir",
         "--windowed",
         "--name",
         "RealWordbook",
@@ -70,10 +76,10 @@ def main() -> int:
         str(BUILD),
         "--specpath",
         str(BUILD),
-        # onefile 默认解包到 %TEMP%\_MEIxxx；本机受限环境里 bootloader 建不了临时目录，
-        # 改成解包到 exe 自己所在的目录（运行期会看到一个 _MEIxxxx 文件夹，退出即删）。
-        "--runtime-tmpdir",
-        ".",
+        "--icon",
+        str(ASSETS / "app.ico"),
+        "--add-data",
+        "%s%s." % (ASSETS / "app.ico", os.pathsep),
     ]
     for name in EXCLUDES:
         cmd += ["--exclude-module", name]

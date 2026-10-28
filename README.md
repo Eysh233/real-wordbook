@@ -79,35 +79,38 @@ python tests/smoke_ui.py
 
 ## 打包成 exe
 
-打包产物放在 `release/`，与 `build/` 一样**不入库**（`.gitignore` 已忽略）。推荐用 PyInstaller：本机装一次即可，一条命令出一个单文件 exe。
+打包产物放在 `release/`，与 `build/` 一样**不入库**（`.gitignore` 已忽略）。用 PyInstaller，装一次即可：
 
 ```bash
 pip install pyinstaller          # 只装一次
-python tools/build_exe.py        # 产物：release/RealWordbook.exe（约 34 MB）
+python tools/build_exe.py        # 产物：release/RealWordbook/RealWordbook.exe
 ```
 
-脚本等价于下面这条命令，逐个 `--exclude-module` 是为了把没用到的大模块（QtWebEngine / QtQml / numpy…）剔掉：
+默认是 **onedir**（exe + 同目录 `_internal/`），把整个 `release/RealWordbook/` 文件夹拷走就能运行，启动是瞬时的。脚本等价于：
 
 ```bash
-python -m PyInstaller --noconfirm --clean --onefile --windowed \
+python -m PyInstaller --noconfirm --clean --onedir --windowed \
   --name RealWordbook --distpath release --workpath build/pyinstaller \
-  --specpath build/pyinstaller --runtime-tmpdir . main.py
+  --specpath build/pyinstaller \
+  --icon assets/app.ico --add-data "assets/app.ico;." main.py
 ```
+
+（外加一长串 `--exclude-module`，把 QtWebEngine / QtQml / numpy 之类没用到的大件剔掉。）
 
 几个和打包相关的坑，文档化在这里：
 
-- **`--runtime-tmpdir .` 不是可选项**：onefile 默认把自身解包到 `%TEMP%\_MEIxxxx`，在受限环境里 bootloader 会直接报 `Could not create temporary directory!` 然后退出。指定 `.` 后改成解包到 exe 旁边，退出时自动清理。
+- **想要单文件**：把 `--onedir` 换成 `--onefile`，并补 `--runtime-tmpdir .`。onefile 默认解包到 `%TEMP%\_MEIxxxx`，在受限环境里 bootloader 会直接报 `Could not create temporary directory!` 后退出；指定 `.` 后改为解包到 exe 旁边，退出自动清理。代价是每次启动慢 1–3 秒。
 - **数据落在 exe 旁边**：`app/config.py` 里对 `sys.frozen` 做了判断，冻结状态下 `APP_DIR = Path(sys.executable).parent`，所以首次运行会在 exe 所在目录生成 `data/`、`StudyBook/`、`StudyRecord/`——而不是写进临时解包目录后丢失。
-- **看不到报错时**：把 `--windowed` 换成 `--console` 重新打包，就能在控制台读到 traceback（`tools/build_exe.py` 里改一行即可）。
-- **换图标 / 版本信息**：加 `--icon assets/app.ico`、`--version-file build/version.txt`。
+- **图标**：`assets/app.ico` 由 `python tools/make_icon.py` 生成（粗体「Re」+ 荧光笔色带的纸色圆角方块，内含 16–256 七个尺寸）。它既作为 exe 图标（`--icon`），也通过 `--add-data` 打进包里给窗口图标用；`config.resource_path()` 负责在源码运行（`assets/`）与冻结运行（`_MEIPASS`）之间切换。
+- **报错看不见时**：`--windowed` 版本没有控制台，stderr 是空的。`main.py` 装了 `sys.excepthook`，未捕获异常会追加到 `data/crash.log`；调试时也可以把 `--windowed` 换成 `--console` 重新打包，直接在控制台看 traceback。
 - exe 没有代码签名，首次运行可能被 SmartScreen 提示「已保护你的电脑」，选「更多信息 → 仍要运行」。
 
 ### 几种打包方案的取舍
 
 | 方案 | 产物 | 启动速度 | 体积 | 适用场景 |
 | --- | --- | --- | --- | --- |
-| **PyInstaller `--onefile`（本项目采用）** | 单个 exe | 慢 1–3 秒（每次解包） | 约 34 MB | 想要「一个文件拷走就能用」 |
-| PyInstaller `--onedir` | 一个文件夹 + exe | 快（无需解包） | 约 60–80 MB（未压缩） | 自己长期用、追求启动速度 |
+| **PyInstaller `--onedir`（本项目采用）** | 文件夹 + exe | 快（无需解包） | 约 60–80 MB | 自己长期用、追求启动速度 |
+| PyInstaller `--onefile` | 单个 exe | 慢 1–3 秒（每次解包） | 约 34 MB | 想要「一个文件拷走就能用」 |
 | Nuitka（`--standalone`） | 文件夹或单文件 | 最快（编译成机器码） | 略小 | 想再快一点，但需要 MSVC 编译器、构建 10 分钟以上 |
 | cx_Freeze | 文件夹 | 中 | 中 | 需要更细的依赖控制时 |
 | py2exe | 文件夹 | 中 | 中 | 老项目遗留，Python 3.8 之后维护停滞，不推荐 |
