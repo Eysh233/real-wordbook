@@ -50,7 +50,7 @@ class NotebookView(QWidget):
         self._turn_mode = "idle"      # idle | out | in
         self._turn_dir = 1
         self._turn_p = 1.0
-        self._cells_hidden = False
+        self._cell_shift = 0
         self._wheel_clock = QElapsedTimer()
         self._wheel_clock.start()
         self.setFocusPolicy(Qt.StrongFocus)
@@ -121,6 +121,7 @@ class NotebookView(QWidget):
             return
         if not animate or self._reduced:
             self._index = target
+            self._cell_shift = 0
             self._rebuild_cells()
             self.update()
             self.pageChanged.emit(self.page_number(), len(self._pages))
@@ -144,7 +145,7 @@ class NotebookView(QWidget):
         if self._anim is not None:
             self._anim.stop()
         self._turn_dir = direction
-        self._hide_cells(True)
+        self._set_cell_shift(0.0)
 
         def animate(duration, curve, on_value, on_done=None):
             anim = QVariantAnimation(self)
@@ -161,17 +162,23 @@ class NotebookView(QWidget):
         def on_out(value):
             self._turn_mode = "out"
             self._turn_p = value
+            self._set_cell_shift(self._layer_tint("content")[1])
             self.update()
 
         def switch():
             self._index = target
+            self._turn_mode = "in"
+            self._turn_p = 0.0
             self._rebuild_cells()
+            # 新页一出现就站在入相的起点，避免「先在原位渲一帧再跳出去」
+            self._set_cell_shift(self._layer_tint("content")[1])
             self.pageChanged.emit(self.page_number(), len(self._pages))
             animate(motion.PAGE_MS, motion.EASE_OUT, on_in, self._clear_turn)
 
         def on_in(value):
             self._turn_mode = "in"
             self._turn_p = value
+            self._set_cell_shift(self._layer_tint("content")[1])
             self.update()
 
         animate(110, motion.EASE_IN, on_out, switch)
@@ -201,27 +208,26 @@ class NotebookView(QWidget):
         出相：旧页从满透明度走到 0，并沿翻页方向移开；
         入相：新页从 0 走到满透明度，从翻页方向的反侧滑回原位。
         """
-        if self._turn_mode == "idle":
+        if self._turn_mode == "idle" or layer != "content":
+            # 纸面与页脚保持固定：外框不跟着动，视线才不会被页面整体晃到
             return 1.0, 0.0
         progress = self._layer_progress(layer)
-        amplitude = {"paper": 4.0, "content": 22.0, "footer": 8.0}.get(layer, 12.0)
-        # 纸面几乎不淡，只轻轻让位；真正动的是内容与页脚，避免整页化成一片糊
-        floor = {"paper": 1.0, "content": 0.22, "footer": 0.45}.get(layer, 0.3)
+        amplitude = 22.0
         if self._turn_mode == "in":
-            alpha = floor + (1.0 - floor) * progress
-            return alpha, self._turn_dir * amplitude * (1.0 - progress)
-        alpha = 1.0 - (1.0 - floor) * progress
-        return alpha, -self._turn_dir * amplitude * progress
+            return 1.0, self._turn_dir * amplitude * (1.0 - progress)
+        return 1.0, -self._turn_dir * amplitude * progress
 
-    def _hide_cells(self, hidden: bool) -> None:
-        self._cells_hidden = hidden
-        for cell in self._cells:
-            cell.setVisible(not hidden)
+    def _set_cell_shift(self, dx: float) -> None:
+        value = int(round(dx))
+        if value != self._cell_shift:
+            self._cell_shift = value
+            self._layout_cells()
 
     def _clear_turn(self) -> None:
         self._turn_mode = "idle"
         self._turn_p = 1.0
-        self._hide_cells(False)
+        self._cell_shift = 0
+        self._layout_cells()
         self.update()
 
     # ---------------------------------------------------------------- 布局
@@ -272,10 +278,6 @@ class NotebookView(QWidget):
                     cell.clicked.connect(self.wordClicked.emit)
                     cell.show()
                     self._cells.append(cell)
-        # 翻页过渡期重建的词格必须保持隐藏，否则会和 _paint_words 叠成重影
-        if self._cells_hidden:
-            for cell in self._cells:
-                cell.hide()
         self._layout_cells()
         self._sync_buttons()
 
@@ -294,7 +296,7 @@ class NotebookView(QWidget):
             for col, _word in enumerate(slot.words):
                 if index >= len(self._cells):
                     break
-                x = content.left() + col * (col_w + gap)
+                x = content.left() + col * (col_w + gap) + self._cell_shift
                 y = y0 + theme.scale(3)
                 self._cells[index].setGeometry(int(x), int(y), int(col_w), cell_h)
                 index += 1
@@ -320,7 +322,6 @@ class NotebookView(QWidget):
         painter.fillRect(self.rect(), theme.color("desk"))
 
         page = self._pages[self._index] if self._pages else None
-        turning = self._turn_mode != "idle"
 
         # 翻页分三层走：纸面最先/最后、内容跟着、页脚收尾。
         # 每层单独 save/restore，透明度与位移互不影响，也不会让书桌背景抖动。
@@ -337,9 +338,6 @@ class NotebookView(QWidget):
         painter.translate(int(round(dx)), 0)
         if page:
             self._paint_rows(painter, page)
-            if turning:
-                # 翻页期间词格控件被隐藏，这里直接画一遍，省掉 30 个控件的跟随动画
-                self._paint_words(painter, page)
         else:
             self._paint_empty(painter)
         painter.restore()
@@ -403,63 +401,6 @@ class NotebookView(QWidget):
             QRectF(content.left() - 12, content.top() - 4, 1, content.height() + 4).topLeft(),
             QRectF(content.left() - 12, content.top() - 4, 1, content.height() + 4).bottomLeft(),
         )
-
-    def _paint_words(self, painter: QPainter, page: paging.Page) -> None:
-        """翻页过渡期用的轻量词条绘制（与 WordCell 的排版对齐）。"""
-        content, _row_h, col_w, gap = self._metrics()
-
-        f_word = QFont(theme.SERIF)
-        f_word.setPixelSize(theme.fs(17 if self._mode != config.DISPLAY_CN else 16))
-        f_word.setWeight(QFont.DemiBold)
-        f_word.setLetterSpacing(QFont.AbsoluteSpacing, 0.4)
-
-        f_mean = QFont(theme.SANS)
-        f_mean.setPixelSize(theme.fs(11 if self._mode != config.DISPLAY_CN else 15))
-
-        for slot, y0, h in self._slot_bands(page):
-            if slot.kind != "words":
-                continue
-            cell_h = max(40, int(h - theme.scale(9)))
-            for col, word in enumerate(slot.words):
-                x = content.left() + col * (col_w + gap)
-                box = QRectF(x + 4, y0 + theme.scale(3) + 1, col_w - 8, cell_h - 2)
-                left = box.left() + 7
-                text_width = max(20.0, box.width() - 14)
-                seed = abs(hash(word.id or word.word)) % 100000
-
-                painter.setFont(f_word)
-                word_text = painter.fontMetrics().elidedText(word.word, Qt.ElideRight, int(text_width))
-                word_h = painter.fontMetrics().height()
-                word_rect = QRectF(left, box.top() + theme.scale(8), min(text_width, painter.fontMetrics().width(word_text) + 6), word_h)
-
-                painter.setFont(f_mean)
-                mean_text = painter.fontMetrics().elidedText(word.meaning_cn, Qt.ElideRight, int(text_width))
-                mean_h = painter.fontMetrics().height()
-                mean_rect = QRectF(left, box.top() + theme.scale(40), min(text_width, painter.fontMetrics().width(mean_text) + 6), mean_h)
-
-                if word.highlight:
-                    painter.setOpacity(0.86)
-                    if self._mode != config.DISPLAY_CN:
-                        painter_utils.draw_highlight(painter, word_rect.adjusted(-2, -2, 4, 2), theme.highlight_color(), seed)
-                    if self._mode != config.DISPLAY_EN:
-                        painter_utils.draw_highlight(painter, mean_rect.adjusted(-2, -1, 4, 1), theme.highlight_color(), seed + 3)
-                    painter.setOpacity(1.0)
-
-                if self._mode != config.DISPLAY_CN:
-                    painter.setFont(f_word)
-                    painter.setPen(theme.color("ink"))
-                    painter.drawText(word_rect, Qt.AlignLeft | Qt.AlignVCenter, word_text)
-                if self._mode != config.DISPLAY_EN:
-                    painter.setFont(f_mean)
-                    painter.setPen(theme.color("ink_soft"))
-                    painter.drawText(mean_rect, Qt.AlignLeft | Qt.AlignVCenter, mean_text)
-
-                if word.strike:
-                    painter_utils.draw_strike(
-                        painter, word_rect.left() - 2, word_rect.right() + 2,
-                        (word_rect.center().y() if self._mode != config.DISPLAY_CN else mean_rect.center().y()),
-                        theme.strike_color(), seed,
-                    )
 
     def _paint_rows(self, painter: QPainter, page: paging.Page) -> None:
         content, _row_h, _col_w, _gap = self._metrics()

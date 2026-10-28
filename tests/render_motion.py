@@ -114,7 +114,7 @@ def main() -> int:
     win.view._turn_mode = "out"
     win.view._turn_dir = 1
     win.view._turn_p = 0.5
-    win.view._hide_cells(True)
+    win.view._set_cell_shift(win.view._layer_tint("content")[1])
     save(win, "21-turn-mid.png")
     win.view._clear_turn()
 
