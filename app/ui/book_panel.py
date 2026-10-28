@@ -36,13 +36,13 @@ class BookCard(QFrame):
         head = QHBoxLayout()
         head.setSpacing(10)
         title = QLabel(book.title)
-        title.setStyleSheet("font-size: %dpx; font-weight: 600; color: %s;" % (theme.scale(15), theme.css("ink")))
+        title.setStyleSheet("font-size: %dpx; font-weight: 600; color: %s;" % (theme.fs(15), theme.css("ink")))
         head.addWidget(title)
         if book.level:
             level = QLabel(book.level)
             level.setStyleSheet(
                 "background: rgba(127,110,88,26); color: %s; border-radius: 6px; padding: 1px 7px; font-size: %dpx;"
-                % (theme.css("ink_soft"), theme.scale(10))
+                % (theme.css("ink_soft"), theme.fs(10))
             )
             head.addWidget(level)
         head.addStretch(1)
@@ -55,7 +55,7 @@ class BookCard(QFrame):
         desc = book.description or "（未填写简介）"
         detail = QLabel(desc)
         detail.setWordWrap(True)
-        detail.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("ink_soft"), theme.scale(11)))
+        detail.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("ink_soft"), theme.fs(11)))
         layout.addWidget(detail)
 
         bar = QProgressBar(self)
@@ -162,7 +162,7 @@ class BookPanel(QWidget):
             )
             empty.setObjectName("faint")
             empty.setAlignment(Qt.AlignCenter)
-            empty.setStyleSheet("color: %s; font-size: %dpx; line-height: 170%%;" % (theme.css("ink_faint"), theme.scale(12)))
+            empty.setStyleSheet("color: %s; font-size: %dpx; line-height: 170%%;" % (theme.css("ink_faint"), theme.fs(12)))
             self._list.addWidget(empty)
         else:
             for book, progress in books:

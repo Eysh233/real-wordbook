@@ -86,6 +86,9 @@ class MainWindow(QMainWindow):
             self.setMinimumSize(940, 620)
         self.resize(width, height)
 
+        theme.set_theme(self.settings.theme)
+        theme.set_scale(self.settings.font_scale)
+
         self._build_ui()
         self._apply_theme()
         self.reload_all()
@@ -112,10 +115,12 @@ class MainWindow(QMainWindow):
         brand_box.setContentsMargins(0, 0, 0, 0)
         brand_box.setSpacing(0)
         brand_title = QLabel("真实单词本")
-        brand_title.setStyleSheet("font-size: 15px; font-weight: 600; letter-spacing: 0.3px;")
+        brand_title.setStyleSheet(
+            "font-size: %dpx; font-weight: 600; letter-spacing: 0.3px;" % theme.fs(15)
+        )
         brand_sub = QLabel("REAL WORDBOOK")
         brand_sub.setObjectName("faint")
-        brand_sub.setStyleSheet("font-size: 8px; letter-spacing: 1.4px;")
+        brand_sub.setStyleSheet("font-size: %dpx; letter-spacing: 1.4px;" % theme.fs(9))
         brand_box.addWidget(brand_title)
         brand_box.addWidget(brand_sub)
         bar.addWidget(brand)
@@ -244,23 +249,41 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ 主题
     def _apply_theme(self) -> None:
-        theme.set_theme(self.settings.theme)
-        theme.set_scale(self.settings.font_scale)
         app = QApplication.instance()
         if app is not None:
             app.setStyleSheet(theme.qss())
             font = QFont(theme.SANS)
-            font.setPixelSize(int(theme.scale(13)))
+            font.setPixelSize(int(theme.fs(13)))
             app.setFont(font)
-        if self._popover is not None:
-            self._popover.deleteLater()
-            self._popover = ActionPopover(self._root)
-            self._popover.highlightToggled.connect(self._toggle_highlight)
-            self._popover.strikeToggled.connect(self._toggle_strike)
-            self._popover.explainRequested.connect(self._explain_word)
-            self._popover.editRequested.connect(self._edit_word)
-            self._popover.deleteRequested.connect(self._delete_word)
-            self._popover.speakRequested.connect(self._speak_word)
+
+    def _rebuild_ui(self) -> None:
+        """主题/字号一变就整体重建：控件的颜色和字号都是在构造时从 token 取的。"""
+        page = self.stack.currentIndex()
+        query = self.search.text()
+        tag = self.tag_combo.currentData()
+        mode = self.mode.value()
+
+        self._close_popover()
+        old = self.takeCentralWidget()
+        if old is not None:
+            old.deleteLater()
+        self._toast = None
+        self._popover = None
+
+        theme.set_theme(self.settings.theme)
+        theme.set_scale(self.settings.font_scale)
+        self._build_ui()
+        self._apply_theme()
+        self.reload_all()
+
+        self.mode.set_value(mode, emit=False)
+        self.view.set_mode(mode)
+        self.search.setText(query)
+        index = self.tag_combo.findData(tag)
+        if index > 0:
+            self.tag_combo.setCurrentIndex(index)
+        self.stack.setCurrentIndex(page)
+        self._on_nav(("book", "study", "stats")[page])
 
     # ------------------------------------------------------------------ 数据
     def reload_all(self) -> None:
@@ -833,8 +856,8 @@ class MainWindow(QMainWindow):
         self.settings_repo.settings = new_settings
         self.settings_repo.save()
         self.mode.set_value(new_settings.display_mode, emit=False)
-        self._apply_theme()
-        self.reload_all()
+        self.view.set_mode(new_settings.display_mode)
+        self._rebuild_ui()
         self._toast_message("设置已保存")
 
     def show_about(self) -> None:

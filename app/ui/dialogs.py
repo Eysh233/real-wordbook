@@ -55,7 +55,7 @@ class AddWordDialog(QDialog):
         self._word_edit = QLineEdit(self)
         self._word_edit.setPlaceholderText("abandon")
         f = QFont(theme.SERIF)
-        f.setPixelSize(theme.scale(18))
+        f.setPixelSize(theme.fs(18))
         self._word_edit.setFont(f)
         root.addWidget(self._field("单词", self._word_edit))
 
@@ -85,7 +85,7 @@ class AddWordDialog(QDialog):
         root.addWidget(self._field("备注", self._note_edit))
 
         self._error = QLabel("")
-        self._error.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("danger"), theme.scale(11)))
+        self._error.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("danger"), theme.fs(11)))
         self._error.setWordWrap(True)
         root.addWidget(self._error)
 
@@ -319,7 +319,7 @@ class SpellingDialog(QDialog):
 
         self._prompt = QLabel("")
         prompt_font = QFont(theme.SANS)
-        prompt_font.setPixelSize(theme.scale(20))
+        prompt_font.setPixelSize(theme.fs(20))
         self._prompt.setFont(prompt_font)
         self._prompt.setWordWrap(True)
         self._prompt.setAlignment(Qt.AlignCenter)
@@ -334,7 +334,7 @@ class SpellingDialog(QDialog):
         self._input = QLineEdit(self)
         self._input.setPlaceholderText("输入英文，回车提交")
         input_font = QFont(theme.SERIF)
-        input_font.setPixelSize(theme.scale(19))
+        input_font.setPixelSize(theme.fs(19))
         self._input.setFont(input_font)
         self._input.setAlignment(Qt.AlignCenter)
         self._input.returnPressed.connect(self._submit)
@@ -395,16 +395,16 @@ class SpellingDialog(QDialog):
         if answer == target:
             self._correct += 1
             self._feedback.setText("✓ 正确")
-            self._feedback.setStyleSheet("color: %s; font-size: 13px;" % theme.css("good"))
+            self._feedback.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("good"), theme.fs(13)))
             self._advance(True)
         elif distance == 1 and len(target) >= 5:
             self._correct += 1
             self._feedback.setText("✓ 拼写略有偏差，正确答案：%s" % word.word)
-            self._feedback.setStyleSheet("color: %s; font-size: 13px;" % theme.css("good"))
+            self._feedback.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("good"), theme.fs(13)))
             self._advance(True, delay=True)
         else:
             self._feedback.setText("✗ 正确答案是 %s" % word.word)
-            self._feedback.setStyleSheet("color: %s; font-size: 13px;" % theme.css("danger"))
+            self._feedback.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("danger"), theme.fs(13)))
             self.answered.emit(word, False)
             self._index += 1
             self._load()
@@ -425,7 +425,7 @@ class SpellingDialog(QDialog):
             return
         word = self._queue[self._index]
         self._feedback.setText("答案是 %s" % word.word)
-        self._feedback.setStyleSheet("color: %s; font-size: 13px;" % theme.css("ink_soft"))
+        self._feedback.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("ink_soft"), theme.fs(13)))
         self.answered.emit(word, False)
         self._index += 1
         from PyQt5.QtCore import QTimer

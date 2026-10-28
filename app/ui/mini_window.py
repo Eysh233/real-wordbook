@@ -38,8 +38,9 @@ class MiniWindow(QWidget):
         close_btn.setFixedSize(22, 22)
         close_btn.setCursor(Qt.PointingHandCursor)
         close_btn.setStyleSheet(
-            "QPushButton { border: none; border-radius: 11px; color: %s; font-size: 15px; }"
-            "QPushButton:hover { background: rgba(127,110,88,30); }" % theme.css("ink_soft")
+            "QPushButton { border: none; border-radius: 11px; color: %s; font-size: %dpx; }"
+            "QPushButton:hover { background: rgba(127,110,88,30); }"
+            % (theme.css("ink_soft"), theme.fs(15))
         )
         close_btn.clicked.connect(self.hide_window)
         head.addWidget(close_btn)
@@ -47,7 +48,7 @@ class MiniWindow(QWidget):
 
         self._word = QLabel("")
         word_font = QFont(theme.SERIF)
-        word_font.setPixelSize(theme.scale(23))
+        word_font.setPixelSize(theme.fs(23))
         word_font.setWeight(QFont.DemiBold)
         self._word.setFont(word_font)
         self._word.setStyleSheet("color: %s;" % theme.css("ink"))
@@ -55,7 +56,7 @@ class MiniWindow(QWidget):
 
         self._meaning = QLabel("")
         self._meaning.setWordWrap(True)
-        self._meaning.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("ink_soft"), theme.scale(11)))
+        self._meaning.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("ink_soft"), theme.fs(11)))
         self._meaning.hide()
         root.addWidget(self._meaning)
         root.addStretch(1)

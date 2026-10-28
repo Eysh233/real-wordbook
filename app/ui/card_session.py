@@ -91,8 +91,9 @@ class CardSession(QWidget):
         close_btn.setFixedSize(26, 26)
         close_btn.setCursor(Qt.PointingHandCursor)
         close_btn.setStyleSheet(
-            "QPushButton { border: none; border-radius: 13px; font-size: 17px; color: %s; }"
-            "QPushButton:hover { background: rgba(127,110,88,30); }" % theme.css("ink_soft")
+            "QPushButton { border: none; border-radius: 13px; font-size: %dpx; color: %s; }"
+            "QPushButton:hover { background: rgba(127,110,88,30); }"
+            % (theme.fs(17), theme.css("ink_soft"))
         )
         close_btn.clicked.connect(self.close_session)
         head.addWidget(close_btn)
@@ -108,7 +109,7 @@ class CardSession(QWidget):
 
         self._word = QLabel("")
         word_font = QFont(theme.SERIF)
-        word_font.setPixelSize(theme.scale(36))
+        word_font.setPixelSize(theme.fs(36))
         word_font.setWeight(QFont.DemiBold)
         self._word.setFont(word_font)
         self._word.setAlignment(Qt.AlignCenter)
@@ -118,7 +119,7 @@ class CardSession(QWidget):
 
         self._phonetic = QLabel("")
         phon_font = QFont(theme.SERIF)
-        phon_font.setPixelSize(theme.scale(12))
+        phon_font.setPixelSize(theme.fs(12))
         phon_font.setItalic(True)
         self._phonetic.setFont(phon_font)
         self._phonetic.setAlignment(Qt.AlignCenter)
@@ -136,7 +137,7 @@ class CardSession(QWidget):
 
         self._meaning = QLabel("")
         mean_font = QFont(theme.SANS)
-        mean_font.setPixelSize(theme.scale(20))
+        mean_font.setPixelSize(theme.fs(20))
         self._meaning.setFont(mean_font)
         self._meaning.setAlignment(Qt.AlignCenter)
         self._meaning.setWordWrap(True)
@@ -146,7 +147,7 @@ class CardSession(QWidget):
 
         self._example = QLabel("")
         ex_font = QFont(theme.SERIF)
-        ex_font.setPixelSize(theme.scale(12))
+        ex_font.setPixelSize(theme.fs(12))
         ex_font.setItalic(True)
         self._example.setFont(ex_font)
         self._example.setAlignment(Qt.AlignCenter)

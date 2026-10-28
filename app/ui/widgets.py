@@ -75,7 +75,7 @@ class Toast(QLabel):
         self._timer.timeout.connect(self._fade_out)
         self.setStyleSheet(
             "QLabel#toast { background: rgba(30,26,22,235); color: #FBF7EF;"
-            " border-radius: 11px; padding: 9px 16px; font-size: 13px; }"
+            " border-radius: 11px; padding: 9px 16px; font-size: %dpx; }" % theme.fs(13)
         )
 
     def show_message(self, text: str, msec: int = 2200) -> None:
@@ -157,5 +157,5 @@ class Chip(QLabel):
         self.setMargin(0)
         self.setStyleSheet(
             "QLabel { background: rgba(127,110,88,26); color: %s; border-radius: 7px;"
-            " padding: 2px 8px; font-size: 11px; }" % theme.css("ink_soft")
+            " padding: 2px 8px; font-size: %dpx; }" % (theme.css("ink_soft"), theme.fs(11))
         )

@@ -8,8 +8,12 @@ from PyQt5.QtGui import QColor
 
 from .. import config
 
-SERIF = "Georgia"
+# 英文一律用无衬线（黑体观感）；中文用雅黑
+SERIF = "Segoe UI"
 SANS = "Microsoft YaHei UI"
+
+# 字号整体放大一档：所有字号都过 fs()，与间距用的 scale() 分开
+FONT_BOOST = 1.12
 
 THEMES: Dict[str, Dict[str, str]] = {
     config.THEME_PAPER: {
@@ -66,11 +70,11 @@ THEMES: Dict[str, Dict[str, str]] = {
         "ink": "#EDE5D7",
         "ink_soft": "#B6A996",
         "ink_faint": "#7C7264",
-        "rule": "#332D26",
+        "rule": "#3B342B",
         "accent": "#E0915B",
         "accent_soft": "#3A2C22",
         "highlight": "#FFD65C",
-        "highlight_alpha": "96",
+        "highlight_alpha": "26",
         "strike": "#D8CCB8",
         "danger": "#E07A6C",
         "good": "#8FBF83",
@@ -103,6 +107,11 @@ def set_scale(value: float) -> None:
 
 def scale(px: float) -> int:
     return max(1, int(round(px * _scale)))
+
+
+def fs(px: float) -> int:
+    """字号：在 scale 基础上再放大 FONT_BOOST（只用于 font-size / setPixelSize）。"""
+    return max(1, int(round(px * _scale * FONT_BOOST)))
 
 
 def tokens() -> Dict[str, str]:
@@ -138,8 +147,8 @@ def veil_color() -> QColor:
 
 def qss() -> str:
     t = THEMES[_current]
-    base = scale(13)
-    small = scale(12)
+    base = fs(13)
+    small = fs(12)
     return """
     QWidget#root { background: %(desk)s; }
     QLabel { color: %(ink)s; font-family: "%(sans)s"; font-size: %(base)dpx; background: transparent; }
@@ -168,7 +177,7 @@ def qss() -> str:
     QPushButton#pageNav {
         background: %(paper_alt)s; color: %(ink_soft)s; border-radius: 14px;
         min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px;
-        font-size: 15px; padding: 0px;
+        font-size: %(navFont)dpx; padding: 0px;
     }
     QPushButton#pageNav:hover { background: %(accent_soft)s; color: %(ink)s; }
     QPushButton#pageNav:disabled { color: %(rule)s; background: transparent; }
@@ -194,6 +203,23 @@ def qss() -> str:
     QCheckBox { color: %(ink)s; font-size: %(base)dpx; spacing: 8px; }
     QCheckBox::indicator { width: 16px; height: 16px; border-radius: 5px; border: 1px solid %(rule)s; background: %(popover)s; }
     QCheckBox::indicator:checked { background: %(accent)s; border: 1px solid %(accent)s; }
+    QRadioButton { color: %(ink)s; font-size: %(base)dpx; spacing: 8px; padding: 2px 0px; }
+    QRadioButton::indicator {
+        width: 15px; height: 15px; border-radius: 8px;
+        border: 1px solid %(rule)s; background: %(popover)s;
+    }
+    QRadioButton::indicator:hover { border: 1px solid %(accent)s; }
+    QRadioButton::indicator:checked { border: 5px solid %(accent)s; background: %(popover)s; }
+    QRadioButton:disabled { color: %(ink_faint)s; }
+    QGroupBox { color: %(ink)s; font-size: %(base)dpx; border: 1px solid %(rule)s; border-radius: 10px; margin-top: 10px; padding-top: 6px; }
+    QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 4px; color: %(ink_soft)s; }
+    QListWidget, QListView {
+        background: %(paper)s; color: %(ink)s; border: 1px solid %(rule)s; border-radius: 10px;
+        font-size: %(base)dpx; outline: none;
+    }
+    QListWidget::item { padding: 5px 7px; border-radius: 6px; }
+    QListWidget::item:selected { background: %(accent_soft)s; color: %(ink)s; }
+    QScrollArea > QWidget > QWidget { background: transparent; }
 
     QFrame#popover { background: %(popover)s; border: 1px solid %(rule)s; border-radius: 16px; }
     QFrame#bookCard { background: %(paper)s; border: 1px solid %(rule)s; border-radius: 14px; }
@@ -220,7 +246,8 @@ def qss() -> str:
     QScrollBar::handle:horizontal { background: rgba(127, 110, 88, 70); border-radius: 4px; min-width: 30px; }
     QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal { width: 0px; }
 
-    QDialog { background: %(desk)s; }
+    QDialog { background: %(paper)s; }
+    QDialog QLabel { color: %(ink)s; }
     QSlider::groove:horizontal { height: 4px; background: %(rule)s; border-radius: 2px; }
     QSlider::handle:horizontal { width: 14px; height: 14px; margin: -6px 0; border-radius: 7px; background: %(accent)s; }
     QSlider::sub-page:horizontal { background: %(accent)s; border-radius: 2px; }
@@ -246,6 +273,7 @@ def qss() -> str:
         "serif": SERIF,
         "base": base,
         "small": small,
-        "h1": scale(20),
-        "stat": scale(26),
+        "h1": fs(21),
+        "stat": fs(27),
+        "navFont": fs(15),
     }

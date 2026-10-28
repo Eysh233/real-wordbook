@@ -35,7 +35,7 @@ class HeatmapWidget(QWidget):
         painter.setRenderHint(QPainter.Antialiasing, True)
         left, top = self._origin()
         f = QFont(theme.SANS)
-        f.setPixelSize(theme.scale(9))
+        f.setPixelSize(theme.fs(9))
         painter.setFont(f)
 
         if not self._grid:
@@ -246,7 +246,7 @@ class StatsPage(QWidget):
         label.setWordWrap(True)
         label.setObjectName("faint" if faint else "muted")
         if not faint:
-            label.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("ink"), theme.scale(12)))
+            label.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("ink"), theme.fs(12)))
         return label
 
     def refresh(self, words, stats_repo) -> None:

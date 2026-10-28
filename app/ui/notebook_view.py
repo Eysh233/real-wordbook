@@ -172,6 +172,17 @@ class NotebookView(QWidget):
         col_w = (content.width() - gap * (config.WORDS_PER_ROW - 1)) / config.WORDS_PER_ROW
         return content, row_h, col_w, gap
 
+    def _slot_bands(self, page):
+        """按行槽高度铺开：[(slot, y, height)]，日期行只有半行高。"""
+        content, row_h, _col_w, _gap = self._metrics()
+        bands = []
+        y = content.top()
+        for slot in page.slots:
+            h = row_h * slot.rows
+            bands.append((slot, y, h))
+            y += h
+        return bands
+
     def _rebuild_cells(self) -> None:
         for cell in self._cells:
             cell.hide()
@@ -198,16 +209,16 @@ class NotebookView(QWidget):
         page = self._pages[self._index] if self._pages else None
         if not page:
             return
-        cell_h = max(40, int(row_h - theme.scale(9)))
         index = 0
-        for row, slot in enumerate(page.slots):
+        for slot, y0, h in self._slot_bands(page):
             if slot.kind != "words":
                 continue
+            cell_h = max(40, int(h - theme.scale(9)))
             for col, _word in enumerate(slot.words):
                 if index >= len(self._cells):
                     break
                 x = content.left() + col * (col_w + gap)
-                y = content.top() + row * row_h + theme.scale(3)
+                y = y0 + theme.scale(3)
                 self._cells[index].setGeometry(int(x), int(y), int(col_w), cell_h)
                 index += 1
 
@@ -286,42 +297,44 @@ class NotebookView(QWidget):
         painter.end()
 
     def _paint_rows(self, painter: QPainter, page: paging.Page) -> None:
-        content, row_h, _col_w, _gap = self._metrics()
+        content, _row_h, _col_w, _gap = self._metrics()
+        bands = self._slot_bands(page)
         rule = QColor(theme.color("rule"))
-        rule.setAlpha(170)
-        for i in range(1, config.ROWS_PER_PAGE):
-            y = content.top() + row_h * i
-            painter.setPen(QPen(rule, 1))
-            painter.drawLine(int(content.left()), int(y), int(content.right()), int(y))
 
         f_date = QFont(theme.SANS)
-        f_date.setPixelSize(theme.scale(10))
+        f_date.setPixelSize(theme.fs(10))
         f_date.setWeight(QFont.DemiBold)
         f_date.setLetterSpacing(QFont.AbsoluteSpacing, 0.8)
 
-        for row, slot in enumerate(page.slots):
-            if slot.kind != "date":
-                continue
-            y = content.top() + row * row_h
-            painter.setFont(f_date)
-            painter.setPen(theme.color("ink_soft"))
-            label = paging.page_label(slot.date, slot.count, slot.continued)
-            painter.drawText(
-                QRectF(content.left(), y + theme.scale(4), content.width(), theme.scale(16)),
-                Qt.AlignLeft | Qt.AlignVCenter,
-                label,
-            )
-            # 日期行的小圆点
-            dot = QColor(theme.color("accent"))
-            dot.setAlpha(160)
-            painter.setPen(Qt.NoPen)
-            painter.setBrush(dot)
-            painter.drawEllipse(QRectF(content.left() - 26, y + row_h / 2 - 2.5, 5, 5))
+        for slot, y0, h in bands:
+            bottom = y0 + h
+            if slot.kind == "date":
+                # 半行日期：文字在小圆点右侧，行线略淡
+                rule.setAlpha(110)
+                painter.setPen(QPen(rule, 1))
+                painter.drawLine(int(content.left()), int(bottom), int(content.right()), int(bottom))
+                painter.setFont(f_date)
+                painter.setPen(theme.color("ink_soft"))
+                label = paging.page_label(slot.date, slot.count, slot.continued)
+                painter.drawText(
+                    QRectF(content.left() + 12, y0, content.width() - 12, h),
+                    Qt.AlignLeft | Qt.AlignVCenter,
+                    label,
+                )
+                dot = QColor(theme.color("accent"))
+                dot.setAlpha(170)
+                painter.setPen(Qt.NoPen)
+                painter.setBrush(dot)
+                painter.drawEllipse(QRectF(content.left(), y0 + h / 2 - 2.5, 5, 5))
+            else:
+                rule.setAlpha(170)
+                painter.setPen(QPen(rule, 1))
+                painter.drawLine(int(content.left()), int(bottom), int(content.right()), int(bottom))
 
     def _paint_footer(self, painter: QPainter) -> None:
         paper = self._paper_rect()
         f = QFont(theme.SANS)
-        f.setPixelSize(theme.scale(10))
+        f.setPixelSize(theme.fs(10))
         painter.setFont(f)
         painter.setPen(theme.color("ink_faint"))
         left = paper.left() + SPINE_W + PAD_LEFT
@@ -340,7 +353,7 @@ class NotebookView(QWidget):
     def _paint_empty(self, painter: QPainter) -> None:
         paper = self._paper_rect()
         f = QFont(theme.SANS)
-        f.setPixelSize(theme.scale(13))
+        f.setPixelSize(theme.fs(13))
         painter.setFont(f)
         painter.setPen(theme.color("ink_faint"))
         painter.drawText(
@@ -349,7 +362,7 @@ class NotebookView(QWidget):
             "这一页还是空白",
         )
         f2 = QFont(theme.SANS)
-        f2.setPixelSize(theme.scale(11))
+        f2.setPixelSize(theme.fs(11))
         painter.setFont(f2)
         painter.drawText(
             QRectF(paper.left() + SPINE_W, paper.center().y(), paper.width() - SPINE_W - 40, 22),

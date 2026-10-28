@@ -52,7 +52,7 @@ class ActionPopover(QFrame):
         header.setSpacing(8)
         self._title = QLabel("")
         font = QFont(theme.SERIF)
-        font.setPixelSize(theme.scale(19))
+        font.setPixelSize(theme.fs(19))
         font.setWeight(QFont.DemiBold)
         self._title.setFont(font)
         self._title.setStyleSheet("color: %s;" % theme.css("ink"))
@@ -65,8 +65,9 @@ class ActionPopover(QFrame):
         close_btn.setFixedSize(24, 24)
         close_btn.setCursor(Qt.PointingHandCursor)
         close_btn.setStyleSheet(
-            "QPushButton { border: none; border-radius: 12px; padding: 0px; color: %s; font-size: 16px; }"
-            "QPushButton:hover { background: rgba(127,110,88,30); }" % theme.css("ink_soft")
+            "QPushButton { border: none; border-radius: 12px; padding: 0px; color: %s; font-size: %dpx; }"
+            "QPushButton:hover { background: rgba(127,110,88,30); }"
+            % (theme.css("ink_soft"), theme.fs(16))
         )
         close_btn.clicked.connect(self.close_popover)
         header.addWidget(close_btn)
@@ -74,7 +75,7 @@ class ActionPopover(QFrame):
 
         self._meaning = QLabel("")
         self._meaning.setWordWrap(True)
-        self._meaning.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("ink_soft"), theme.scale(12)))
+        self._meaning.setStyleSheet("color: %s; font-size: %dpx;" % (theme.css("ink_soft"), theme.fs(12)))
         root.addWidget(self._meaning)
 
         root.addWidget(widgets.divider())
@@ -126,7 +127,7 @@ class ActionPopover(QFrame):
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         button.setStyleSheet(
             "QPushButton { padding: 5px 8px; border-radius: 8px; font-size: %dpx; color: %s; }"
-            "QPushButton:hover { background: rgba(127,110,88,26); }" % (theme.scale(12), theme.css("ink"))
+            "QPushButton:hover { background: rgba(127,110,88,26); }" % (theme.fs(13), theme.css("ink"))
         )
         layout.addWidget(button, 1)
         return button
@@ -136,13 +137,13 @@ class ActionPopover(QFrame):
         if active:
             button.setStyleSheet(
                 "QPushButton { padding: 5px 8px; border-radius: 8px; font-size: %dpx; color: %s;"
-                " background: %s; font-weight: 600; }" % (theme.scale(12), theme.css("ink"), theme.css("highlight"))
+                " background: %s; font-weight: 600; }" % (theme.fs(13), theme.css("ink"), theme.css("highlight"))
             )
         else:
             button.setStyleSheet(
                 "QPushButton { padding: 5px 8px; border-radius: 8px; font-size: %dpx; color: %s; }"
                 "QPushButton:hover { background: rgba(127,110,88,26); }"
-                % (theme.scale(12), theme.css("ink"))
+                % (theme.fs(13), theme.css("ink"))
             )
 
     # ---------------------------------------------------------------- 打开
@@ -215,7 +216,7 @@ class ActionPopover(QFrame):
     def set_ai_loading(self) -> None:
         self._ai.show()
         self._ai.setHtml(
-            "<div style='color:%s; font-size:10pt; padding:8px 2px;'>正在请 DeepSeek 拆解这个词……</div>"
+            "<div style='color:%s; font-size:11pt; padding:8px 2px;'>正在请 DeepSeek 拆解这个词……</div>"
             % theme.css("ink_soft")
         )
         self._fit_ai()
@@ -230,7 +231,7 @@ class ActionPopover(QFrame):
     def set_ai_error(self, message: str) -> None:
         self._ai.show()
         self._ai.setHtml(
-            "<div style='color:%s; font-size:10pt; padding:6px 2px;'>AI 解释失败：%s<br><br>"
+            "<div style='color:%s; font-size:11pt; padding:6px 2px;'>AI 解释失败：%s<br><br>"
             "可在「设置」里检查 API Key 与网络。</div>" % (theme.css("danger"), message)
         )
         self._fit_ai()
@@ -261,18 +262,18 @@ class ActionPopover(QFrame):
                 return ""
             return (
                 "<div style='margin-top:9px;'>"
-                "<div style='color:%s; font-size:8pt; letter-spacing:1px;'>%s</div>"
-                "<div style='color:%s; font-size:9.5pt; margin-top:2px;'>%s</div></div>"
+                "<div style='color:%s; font-size:10pt; letter-spacing:1px;'>%s</div>"
+                "<div style='color:%s; font-size:10.5pt; margin-top:2px;'>%s</div></div>"
                 % (faint, title, ink, body)
             )
 
         parts = [
             "<div style='font-family:\"Microsoft YaHei UI\"; line-height:145%%;'>",
-            "<div style='font-size:12pt; color:%s; font-weight:600;'>%s</div>"
+            "<div style='font-size:13pt; color:%s; font-weight:600;'>%s</div>"
             % (ink, data.get("translation_cn") or word.meaning_cn),
         ]
         if data.get("meaning_en"):
-            parts.append("<div style='color:%s; font-size:9pt; font-style:italic;'>%s</div>" % (soft, data["meaning_en"]))
+            parts.append("<div style='color:%s; font-size:10pt; font-style:italic;'>%s</div>" % (soft, data["meaning_en"]))
         if data.get("breakdown"):
             parts.append(section("构词", data["breakdown"]))
         collocations = data.get("collocations") or []
@@ -290,8 +291,8 @@ class ActionPopover(QFrame):
                 en = item.get("en", "")
                 cn = item.get("cn", "")
                 rows.append(
-                    "<div style='margin:3px 0;'><span style='font-family:Georgia; font-size:9.5pt;'>%s</span>"
-                    "<br><span style='color:%s; font-size:9pt;'>%s</span></div>" % (en, soft, cn)
+                    "<div style='margin:3px 0;'><span style='font-family:Segoe UI; font-size:10.5pt;'>%s</span>"
+                    "<br><span style='color:%s; font-size:10pt;'>%s</span></div>" % (en, soft, cn)
                 )
             parts.append(section("例句", "".join(rows)))
         if data.get("memory_tip"):

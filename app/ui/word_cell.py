@@ -103,16 +103,16 @@ class WordCell(QWidget):
 
         # 字体
         f_word = QFont(theme.SERIF)
-        f_word.setPixelSize(theme.scale(17 if self.mode != config.DISPLAY_CN else 16))
+        f_word.setPixelSize(theme.fs(17 if self.mode != config.DISPLAY_CN else 16))
         f_word.setWeight(QFont.DemiBold)
         f_word.setLetterSpacing(QFont.AbsoluteSpacing, 0.4)
 
         f_phon = QFont(theme.SANS)
-        f_phon.setPixelSize(theme.scale(9))
+        f_phon.setPixelSize(theme.fs(9))
         f_phon.setItalic(True)
 
         f_mean = QFont(theme.SANS)
-        f_mean.setPixelSize(theme.scale(11 if self.mode != config.DISPLAY_CN else 15))
+        f_mean.setPixelSize(theme.fs(11 if self.mode != config.DISPLAY_CN else 15))
 
         left = box.left() + 7
         width = box.width() - 14
