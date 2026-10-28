@@ -187,7 +187,7 @@ class WordCell(QWidget):
             painter.setPen(theme.color("ink_faint"))
             phon = word.phonetic or ""
             painter.drawText(
-                QRectF(left, word_top + word_h - theme.scale(9), text_width, theme.scale(12)),
+                QRectF(left, word_top + word_h - theme.scale(3), text_width, theme.scale(12)),
                 Qt.AlignLeft | Qt.AlignVCenter,
                 painter.fontMetrics().elidedText(phon, Qt.ElideRight, int(text_width)),
             )
