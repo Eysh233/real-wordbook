@@ -11,10 +11,9 @@ from PyQt5.QtCore import (
     QRectF,
     Qt,
     QTimer,
-    QVariantAnimation,
     pyqtSignal,
 )
-from PyQt5.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen
+from PyQt5.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import QGraphicsOpacityEffect, QPushButton, QWidget
 
 from .. import config
@@ -51,10 +50,16 @@ class NotebookView(QWidget):
         self._turn_dir = 1
         self._turn_p = 1.0
         self._cell_shift = 0
+        # 翻页期间用词格自身的位图快照跟随位移：既没有重排，也不会因为换渲染路径闪一下
+        self._cell_shots = []
+        # 纸面（投影/纸纹/装订脊/边线）与尺寸主题绑定，缓存成位图，翻页时直接贴图
+        self._sheet: Optional[QPixmap] = None
+        self._sheet_key = None
         self._wheel_clock = QElapsedTimer()
         self._wheel_clock.start()
         self.setFocusPolicy(Qt.StrongFocus)
         self.setMouseTracking(True)
+        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
 
         self._prev_btn = QPushButton("‹", self)
         self._prev_btn.setObjectName("pageNav")
@@ -77,6 +82,10 @@ class NotebookView(QWidget):
         self._rebuild_cells()
         self.update()
         self.pageChanged.emit(self.page_number(), len(self._pages))
+
+    def refresh_theme(self) -> None:
+        self._sheet = None
+        self.update()
 
     def set_mode(self, mode: str) -> None:
         self._mode = mode
@@ -122,6 +131,7 @@ class NotebookView(QWidget):
         if not animate or self._reduced:
             self._index = target
             self._cell_shift = 0
+            self._drop_cell_shots()
             self._rebuild_cells()
             self.update()
             self.pageChanged.emit(self.page_number(), len(self._pages))
@@ -145,24 +155,14 @@ class NotebookView(QWidget):
         if self._anim is not None:
             self._anim.stop()
         self._turn_dir = direction
-        self._set_cell_shift(0.0)
+        self._take_cell_shots()
 
         def animate(duration, curve, on_value, on_done=None):
-            anim = QVariantAnimation(self)
-            anim.setDuration(motion.ms(duration))
-            anim.setStartValue(0.0)
-            anim.setEndValue(1.0)
-            anim.setEasingCurve(curve)
-            anim.valueChanged.connect(lambda v: on_value(float(v)))
-            if on_done is not None:
-                anim.finished.connect(on_done)
-            anim.start()
-            self._anim = anim
+            self._anim = motion.animate(self, motion.ms(duration), curve, on_value, on_done)
 
         def on_out(value):
             self._turn_mode = "out"
             self._turn_p = value
-            self._set_cell_shift(self._layer_tint("content")[1])
             self.update()
 
         def switch():
@@ -170,18 +170,17 @@ class NotebookView(QWidget):
             self._turn_mode = "in"
             self._turn_p = 0.0
             self._rebuild_cells()
-            # 新页一出现就站在入相的起点，避免「先在原位渲一帧再跳出去」
-            self._set_cell_shift(self._layer_tint("content")[1])
+            # 新页一出现就拍成快照，入相期间只贴图
+            self._take_cell_shots()
             self.pageChanged.emit(self.page_number(), len(self._pages))
             animate(motion.PAGE_MS, motion.EASE_OUT, on_in, self._clear_turn)
 
         def on_in(value):
             self._turn_mode = "in"
             self._turn_p = value
-            self._set_cell_shift(self._layer_tint("content")[1])
             self.update()
 
-        animate(110, motion.EASE_IN, on_out, switch)
+        animate(motion.TURN_OUT_MS, motion.EASE_OUT, on_out, switch)
 
     # ------------------------------------------------------------ 分层进度
     @staticmethod
@@ -212,10 +211,26 @@ class NotebookView(QWidget):
             # 纸面与页脚保持固定：外框不跟着动，视线才不会被页面整体晃到
             return 1.0, 0.0
         progress = self._layer_progress(layer)
-        amplitude = 22.0
+        amplitude = 16.0
         if self._turn_mode == "in":
             return 1.0, self._turn_dir * amplitude * (1.0 - progress)
         return 1.0, -self._turn_dir * amplitude * progress
+
+    def _take_cell_shots(self) -> None:
+        """把当前页的词格拍成位图并隐藏控件，翻页期间只贴图。"""
+        shots = []
+        for cell in self._cells:
+            if not cell.isVisible():
+                continue
+            shots.append((cell.grab(), cell.pos()))
+            cell.hide()
+        self._cell_shots = shots
+
+    def _drop_cell_shots(self, show: bool = True) -> None:
+        self._cell_shots = []
+        if show:
+            for cell in self._cells:
+                cell.show()
 
     def _set_cell_shift(self, dx: float) -> None:
         value = int(round(dx))
@@ -227,6 +242,7 @@ class NotebookView(QWidget):
         self._turn_mode = "idle"
         self._turn_p = 1.0
         self._cell_shift = 0
+        self._drop_cell_shots()
         self._layout_cells()
         self.update()
 
@@ -338,6 +354,8 @@ class NotebookView(QWidget):
         painter.translate(int(round(dx)), 0)
         if page:
             self._paint_rows(painter, page)
+            for shot, pos in self._cell_shots:
+                painter.drawPixmap(pos, shot)
         else:
             self._paint_empty(painter)
         painter.restore()
@@ -352,7 +370,24 @@ class NotebookView(QWidget):
 
         painter.end()
 
+    def _sheet_pixmap(self) -> QPixmap:
+        key = (self.width(), self.height(), theme.current_theme(), theme.scale(100))
+        if self._sheet is not None and self._sheet_key == key:
+            return self._sheet
+        pix = QPixmap(max(1, self.width()), max(1, self.height()))
+        pix.fill(Qt.transparent)
+        painter = QPainter(pix)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        self._draw_sheet(painter)
+        painter.end()
+        self._sheet = pix
+        self._sheet_key = key
+        return pix
+
     def _paint_sheet(self, painter: QPainter) -> None:
+        painter.drawPixmap(0, 0, self._sheet_pixmap())
+
+    def _draw_sheet(self, painter: QPainter) -> None:
         paper = self._paper_rect()
 
         # 投影 + 纸面
@@ -479,6 +514,7 @@ class NotebookView(QWidget):
     # ---------------------------------------------------------------- 事件
     def resizeEvent(self, event):  # noqa: N802
         super().resizeEvent(event)
+        self._sheet = None
         self._layout_cells()
         self._nav_geometry()
 
