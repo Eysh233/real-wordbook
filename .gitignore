@@ -31,6 +31,12 @@ data/
 *.log
 logs/
 
+# 个人背诵记录（StudyRecord/ 只保留目录占位）
+StudyRecord/*.json
+
+# 开发期界面截图
+docs/shots/
+
 # ---- 密钥与本地配置（多重保险）----
 .env
 .env.*
