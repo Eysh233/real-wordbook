@@ -235,7 +235,8 @@ class MainWindow(QMainWindow):
         QShortcut(QKeySequence("Ctrl+N"), self, activated=self.add_word)
         QShortcut(QKeySequence("Ctrl+F"), self, activated=lambda: self.search.setFocus())
         QShortcut(QKeySequence("Ctrl+Shift+M"), self, activated=self.toggle_mini)
-        QShortcut(QKeySequence("Escape"), self, activated=self._escape)
+        # 存成属性，避免 Python 侧回收后快捷键静默失效
+        self._esc_shortcut = QShortcut(QKeySequence("Escape"), self, activated=self._escape)
         QShortcut(QKeySequence("Ctrl+,"), self, activated=self.open_settings)
 
     def _center(self) -> None:
@@ -375,8 +376,9 @@ class MainWindow(QMainWindow):
         self.view.set_mode(key)
 
     def _escape(self) -> None:
-        if self._session is not None and self._session.isVisible():
-            self._session.close_session()
+        session = self._session
+        if session is not None and session.isVisible():
+            session.close_session()
             return
         self._close_popover()
 
@@ -587,8 +589,10 @@ class MainWindow(QMainWindow):
 
     def _on_session_finished(self, summary: Dict) -> None:
         if self._session is not None:
-            self._session.deleteLater()
+            closing = self._session
             self._session = None
+            # 会话已经把遮罩淡出并 hide，再交给事件循环回收，避免动画回调撞上已销毁的对象
+            QTimer.singleShot(0, closing.deleteLater)
         if summary and not summary.get("closed"):
             self._toast_message(
                 "本轮 %d 词 · 认识 %d · 不认识 %d"

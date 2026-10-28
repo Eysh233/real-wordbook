@@ -13,6 +13,7 @@ from PyQt5.QtCore import (
     QRect,
     QRectF,
     Qt,
+    QTimer,
     pyqtSignal,
 )
 from PyQt5.QtGui import QColor, QFont, QKeySequence, QPainter
@@ -74,6 +75,8 @@ class CardSession(QWidget):
         self._answered = 0
         self._seen_sent = set()
         self._anim = None
+        self._closing = False
+        self._completed = False
         self.setFocusPolicy(Qt.StrongFocus)
         self.setAttribute(Qt.WA_StyledBackground, False)
         # 键盘兜底：焦点落在按钮上时 keyPressEvent 收不到按键，统一用应用级快捷键接管
@@ -113,13 +116,16 @@ class CardSession(QWidget):
         self._progress_text = QLabel("")
         self._progress_text.setObjectName("faint")
         head.addWidget(self._progress_text)
-        close_btn = QPushButton("×")
+        close_btn = QPushButton("✕")
         close_btn.setFixedSize(26, 26)
         close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.setToolTip("退出（Esc）")
         close_btn.setStyleSheet(
-            "QPushButton { border: none; border-radius: 13px; font-size: %dpx; color: %s; }"
-            "QPushButton:hover { background: rgba(127,110,88,30); }"
-            % (theme.fs(17), theme.css("ink_soft"))
+            "QPushButton { border: none; border-radius: 13px; padding: 0px;"
+            " font-family: 'Segoe UI Symbol', 'Segoe UI', 'Microsoft YaHei UI';"
+            " font-size: %dpx; color: %s; }"
+            "QPushButton:hover { background: rgba(127,110,88,40); }"
+            % (theme.fs(15), theme.css("ink_soft"))
         )
         close_btn.clicked.connect(self.close_session)
         head.addWidget(close_btn)
@@ -241,6 +247,8 @@ class CardSession(QWidget):
         parent = self.parentWidget()
         if parent:
             self.setGeometry(parent.rect())
+        self._closing = False
+        self._completed = False
         self.show()
         self.raise_()
         self.setFocus(Qt.OtherFocusReason)
@@ -419,16 +427,32 @@ class CardSession(QWidget):
         self._btn_known.hide()
         self._btn_register.hide()
         self._hint.setText("按 Esc 或右上角关闭")
-        self.finished.emit({"total": total, "known": self._known, "answered": self._answered})
+        self._completed = True
+        # 让「本轮结束」在屏幕上留一口气，再由 close_session 统一收尾
+        QTimer.singleShot(1200, self.close_session)
 
     def close_session(self) -> None:
-        self.finished.emit(
-            {"total": len(self.items), "known": self._known, "answered": self._answered, "closed": True}
-        )
-        if motion.reduced():
-            self.hide()
+        if getattr(self, "_closing", False):
             return
-        self._fade_veil(0.0, 140, motion.EASE_IN, self.hide)
+        self._closing = True
+        summary = {
+            "total": len(self.items),
+            "known": self._known,
+            "answered": self._answered,
+            "closed": not self._completed,
+        }
+
+        def done() -> None:
+            # 先隐藏再通知外层：外层收到 finished 会 deleteLater 这个控件，
+            # 若先发信号，后续的淡出动画就在一个等待销毁的对象上跑，会话会卡在屏幕上。
+            self.hide()
+            self._closing = False
+            self.finished.emit(summary)
+
+        if motion.reduced():
+            done()
+            return
+        self._fade_veil(0.0, 140, motion.EASE_IN, done)
 
     # ---------------------------------------------------------------- 事件
     def paintEvent(self, event):  # noqa: N802

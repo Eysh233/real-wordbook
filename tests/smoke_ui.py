@@ -119,7 +119,11 @@ def main() -> int:
     app.processEvents()
     check(win.stats_repo.data["quiz"]["total"] >= 1, "抽背计入统计")
     session.close_session()
-    app.processEvents()
+    for _ in range(60):  # 关闭是「遮罩淡出 140ms → hide → 发 finished」的异步流程
+        app.processEvents()
+        if win._session is None:
+            break
+        time.sleep(0.01)
     check(win._session is None, "会话关闭后清理")
 
     print("[6] 导入单词书并背书")
@@ -174,6 +178,11 @@ def main() -> int:
     check(after["seen"] >= 1, "已显示记录 +%d" % after["seen"])
     check(after["registered"] >= 1, "已登记记录 +%d" % after["registered"])
     book_session.close_session()
+    for _ in range(60):
+        app.processEvents()
+        if win._session is None:
+            break
+        time.sleep(0.01)
     app.processEvents()
 
     print("[7] 统计页与主题")
