@@ -14,7 +14,7 @@ from PyQt5.QtCore import (
     QVariantAnimation,
     pyqtSignal,
 )
-from PyQt5.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen
+from PyQt5.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen, QPixmap
 from PyQt5.QtWidgets import QGraphicsOpacityEffect, QPushButton, QWidget
 
 from .. import config
@@ -44,6 +44,16 @@ class NotebookView(QWidget):
         self._mode = config.DISPLAY_BOTH
         self._reduced = False
         self._cells: List[WordCell] = []
+        # 词格统一挂在内容层上：翻页时每帧只移动这一个控件，
+        # 30 个词格不再逐个 setGeometry，重绘量从「每格一次」降到「一次整体位移」
+        self._content = QWidget(self)
+        self._content.setAttribute(Qt.WA_NoSystemBackground, True)
+        self._content.setAutoFillBackground(False)
+        self._content.setGeometry(0, 0, self.width(), self.height())
+        self._content.show()
+        # 纸面（投影/纸纹/装订脊/孔/边线）与尺寸、主题绑定，缓存成位图后每帧只贴图
+        self._sheet: Optional[QPixmap] = None
+        self._sheet_key = None
         self._anim: Optional[QPropertyAnimation] = None
         self._effect: Optional[QGraphicsOpacityEffect] = None
         # 翻页分层：纸面 / 行与日期与词 / 页脚，各自不同的位移与先后
@@ -55,6 +65,7 @@ class NotebookView(QWidget):
         self._wheel_clock.start()
         self.setFocusPolicy(Qt.StrongFocus)
         self.setMouseTracking(True)
+        self.setAttribute(Qt.WA_OpaquePaintEvent, True)
 
         self._prev_btn = QPushButton("‹", self)
         self._prev_btn.setObjectName("pageNav")
@@ -77,6 +88,11 @@ class NotebookView(QWidget):
         self._rebuild_cells()
         self.update()
         self.pageChanged.emit(self.page_number(), len(self._pages))
+
+    def refresh_theme(self) -> None:
+        """主题切换后纸面缓存失效。"""
+        self._sheet = None
+        self.update()
 
     def set_mode(self, mode: str) -> None:
         self._mode = mode
@@ -139,7 +155,9 @@ class NotebookView(QWidget):
 
         Apple 的「hint in the direction of the gesture」在这里落到三处：
         要走的页内容先行、纸面随后；进来的页纸面先到、内容跟上来、页脚最后。
-        位移/淡入只发生在纸页绘制里，控件本身不动，书桌背景不会跟着晃。
+        纸面与页脚全程固定；真正的位移只发生在内容层上——30 个词格统一挂在
+        `self._content` 里，每帧只 `move()` 这一个控件，词格自己不重排、不重绘。
+        书桌背景不会跟着晃。
         """
         direction = 1 if target > self._index else -1
         if self._anim is not None:
@@ -169,9 +187,9 @@ class NotebookView(QWidget):
             self._index = target
             self._turn_mode = "in"
             self._turn_p = 0.0
-            self._rebuild_cells()
-            # 新页一出现就站在入相的起点，避免「先在原位渲一帧再跳出去」
+            # 先把内容层挪到入相起点，再重建词格：新页第一帧就位，不会先闪回原位
             self._set_cell_shift(self._layer_tint("content")[1])
+            self._rebuild_cells()
             self.pageChanged.emit(self.page_number(), len(self._pages))
             animate(motion.PAGE_MS, motion.EASE_OUT, on_in, self._clear_turn)
 
@@ -221,7 +239,7 @@ class NotebookView(QWidget):
         value = int(round(dx))
         if value != self._cell_shift:
             self._cell_shift = value
-            self._layout_cells()
+            self._content.move(value, 0)
 
     def _clear_turn(self) -> None:
         self._turn_mode = "idle"
@@ -274,7 +292,7 @@ class NotebookView(QWidget):
                 if slot.kind != "words":
                     continue
                 for word in slot.words:
-                    cell = WordCell(word, self._mode, self)
+                    cell = WordCell(word, self._mode, self._content)
                     cell.clicked.connect(self.wordClicked.emit)
                     cell.show()
                     self._cells.append(cell)
@@ -284,6 +302,8 @@ class NotebookView(QWidget):
     def _layout_cells(self) -> None:
         if not self._cells:
             return
+        if self._content.size() != self.size():
+            self._content.setGeometry(0, 0, self.width(), self.height())
         content, row_h, col_w, gap = self._metrics()
         page = self._pages[self._index] if self._pages else None
         if not page:
@@ -296,7 +316,7 @@ class NotebookView(QWidget):
             for col, _word in enumerate(slot.words):
                 if index >= len(self._cells):
                     break
-                x = content.left() + col * (col_w + gap) + self._cell_shift
+                x = content.left() + col * (col_w + gap)
                 y = y0 + theme.scale(3)
                 self._cells[index].setGeometry(int(x), int(y), int(col_w), cell_h)
                 index += 1
@@ -307,6 +327,9 @@ class NotebookView(QWidget):
         y = int(paper.bottom() - PAD_BOTTOM / 2 - size / 2 + 2)
         self._next_btn.setGeometry(int(paper.right() - PAD_RIGHT - size), y, size, size)
         self._prev_btn.setGeometry(int(paper.right() - PAD_RIGHT - size * 2 - 8), y, size, size)
+        # 内容层铺满整个视图，翻页按钮必须压在它上面才点得到
+        self._prev_btn.raise_()
+        self._next_btn.raise_()
 
     def _sync_buttons(self) -> None:
         self._prev_btn.setEnabled(self._index > 0)
@@ -352,7 +375,24 @@ class NotebookView(QWidget):
 
         painter.end()
 
+    def _sheet_pixmap(self) -> QPixmap:
+        key = (self.width(), self.height(), theme.current_theme(), theme.scale(100))
+        if self._sheet is not None and self._sheet_key == key:
+            return self._sheet
+        pix = QPixmap(max(1, self.width()), max(1, self.height()))
+        pix.fill(Qt.transparent)
+        painter = QPainter(pix)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        self._draw_sheet(painter)
+        painter.end()
+        self._sheet = pix
+        self._sheet_key = key
+        return pix
+
     def _paint_sheet(self, painter: QPainter) -> None:
+        painter.drawPixmap(0, 0, self._sheet_pixmap())
+
+    def _draw_sheet(self, painter: QPainter) -> None:
         paper = self._paper_rect()
 
         # 投影 + 纸面
@@ -479,6 +519,8 @@ class NotebookView(QWidget):
     # ---------------------------------------------------------------- 事件
     def resizeEvent(self, event):  # noqa: N802
         super().resizeEvent(event)
+        self._sheet = None
+        self._content.setGeometry(0, 0, self.width(), self.height())
         self._layout_cells()
         self._nav_geometry()
 
