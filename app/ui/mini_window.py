@@ -1,6 +1,7 @@
 """桌面迷你悬浮窗（F7）：常驻一角，随时瞄一眼单词。
 
-外观：亚克力毛玻璃卡片（DWM 模糊）+ 纸色半透明底；打开时带弹簧感的缩放入场。
+外观：不透明的纸色卡片（圆角 + 投影 + 细描边），和主界面的纸页一致；
+打开时带弹簧感的缩放入场。
 """
 import random
 from typing import List, Optional
@@ -19,7 +20,7 @@ from PyQt5.QtGui import QColor, QPainter, QPen
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from ..models import Word
-from . import acrylic, motion, theme
+from . import motion, theme
 
 _ENTER_MS = 300
 _EXIT_MS = 150
@@ -42,7 +43,6 @@ class MiniWindow(QWidget):
         self._target = QRect(self.pos(), self.size())
         self._geo_anim: Optional[QPropertyAnimation] = None
         self._fade_anim: Optional[QPropertyAnimation] = None
-        self._glassy = False
 
         root = QVBoxLayout(self)
         root.setContentsMargins(20, 16, 20, 14)
@@ -196,7 +196,6 @@ class MiniWindow(QWidget):
             self._target = QRect(self._pos, self.size())
         self.show()
         self.raise_()
-        self._apply_glass()
         if not motion.reduced():
             self._play_enter()
         if self._words:
@@ -241,11 +240,6 @@ class MiniWindow(QWidget):
             self._pos = self.pos()
             self._target = QRect(self.pos(), self.size())
 
-    def _apply_glass(self) -> None:
-        if self._glassy:
-            return
-        self._glassy = acrylic.enable(int(self.winId()), tint=0x7AFFFFFF)
-
     # ---------------------------------------------------------------- 绘制
     def paintEvent(self, event):  # noqa: N802
         painter = QPainter(self)
@@ -259,17 +253,9 @@ class MiniWindow(QWidget):
             painter.setBrush(layer)
             painter.drawRoundedRect(body.adjusted(-i, i, i, i + 2), 16, 16)
 
-        glass = QColor(theme.color("paper"))
-        glass.setAlpha(206)
-        painter.setBrush(glass)
         painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(theme.css("paper")))
         painter.drawRoundedRect(body, 16, 16)
-
-        highlight = QColor(255, 255, 255, 44)
-        painter.setBrush(highlight)
-        painter.drawRoundedRect(
-            body.adjusted(0.5, 0.5, -0.5, -body.height() * 0.55), 16, 16
-        )
 
         painter.setBrush(Qt.NoBrush)
         painter.setPen(QPen(QColor(theme.css("rule")), 1))
