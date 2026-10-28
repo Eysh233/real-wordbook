@@ -151,6 +151,8 @@ def qss() -> str:
     small = fs(12)
     return """
     QWidget#root { background: %(desk)s; }
+    QStackedWidget { background: transparent; }
+    QStackedWidget > QWidget { background: transparent; }
     QLabel { color: %(ink)s; font-family: "%(sans)s"; font-size: %(base)dpx; background: transparent; }
     QLabel#brand { color: %(ink_soft)s; font-size: %(small)dpx; letter-spacing: 2px; }
     QLabel#h1 { color: %(ink)s; font-size: %(h1)dpx; font-weight: 600; }
@@ -173,7 +175,19 @@ def qss() -> str:
     QPushButton#ghost { border: 1px solid %(rule)s; padding: 6px 12px; }
     QPushButton#ghost:hover { background: %(paper_alt)s; }
     QPushButton#danger { color: %(danger)s; }
-    QPushButton#link { color: %(accent)s; padding: 2px 4px; text-align: left; }
+    /* 文字型按钮也必须有按钮实体：淡底 + 1px 描边，悬停加深，按下压暗 */
+    QPushButton#link {
+        color: %(accent)s; background: %(paper_alt)s; border: 1px solid %(rule)s;
+        border-radius: 9px; padding: 5px 11px;
+    }
+    QPushButton#link:hover { background: %(popover)s; border-color: %(accent)s; }
+    QPushButton#link:pressed { background: %(accent_soft)s; }
+    QPushButton#soft {
+        color: %(accent)s; background: %(accent_soft)s; border: 1px solid %(accent_soft)s;
+        border-radius: 9px; padding: 6px 13px; font-weight: 600;
+    }
+    QPushButton#soft:hover { border-color: %(accent)s; }
+    QPushButton#soft:pressed { background: %(paper_alt)s; }
     QPushButton#pageNav {
         background: %(paper_alt)s; color: %(ink_soft)s; border-radius: 14px;
         min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px;
@@ -184,10 +198,12 @@ def qss() -> str:
 
     QFrame#segmented { background: rgba(127, 110, 88, 26); border-radius: 10px; }
     QFrame#segmented QPushButton {
-        border: none; border-radius: 8px; padding: 5px 11px; font-size: %(small)dpx; color: %(ink_soft)s;
+        border: none; border-radius: 8px; padding: 5px 11px; font-size: %(small)dpx;
+        color: %(ink_soft)s; background: transparent;
     }
-    QFrame#segmented QPushButton:checked { background: %(paper)s; color: %(ink)s; font-weight: 600; }
-    QFrame#segmented QPushButton:hover { color: %(ink)s; }
+    QFrame#segmented QPushButton:hover { color: %(ink)s; background: transparent; }
+    QFrame#segmented QPushButton:pressed { background: transparent; }
+    QFrame#segmented QPushButton:checked { background: transparent; color: %(ink)s; font-weight: 600; }
 
     QLineEdit, QTextEdit, QPlainTextEdit, QComboBox, QSpinBox {
         background: %(popover)s; color: %(ink)s; border: 1px solid %(rule)s;
@@ -222,8 +238,8 @@ def qss() -> str:
     QScrollArea > QWidget > QWidget { background: transparent; }
 
     QFrame#popover { background: %(popover)s; border: 1px solid %(rule)s; border-radius: 16px; }
-    QFrame#bookCard { background: %(paper)s; border: 1px solid %(rule)s; border-radius: 14px; }
-    QFrame#statCard { background: %(paper)s; border: 1px solid %(rule)s; border-radius: 14px; }
+    QFrame#bookCard { background: %(popover)s; border: 1px solid %(rule)s; border-radius: 14px; }
+    QFrame#statCard { background: %(popover)s; border: 1px solid %(rule)s; border-radius: 14px; }
     QFrame#sheet { background: %(paper)s; border: 1px solid %(rule)s; border-radius: 18px; }
     QFrame#chip { background: %(paper_alt)s; border-radius: 8px; }
     QLabel#chipText { color: %(ink_soft)s; font-size: %(small)dpx; }

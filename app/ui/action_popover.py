@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
 
 from .. import config
 from ..models import Word
-from . import theme, widgets
+from . import motion, theme, widgets
 
 WIDTH_IDLE = 396
 WIDTH_AI = 476
@@ -120,31 +120,43 @@ class ActionPopover(QFrame):
 
     # ---------------------------------------------------------------- 构建
     def _tool_button(self, label: str, layout: QHBoxLayout) -> QPushButton:
+        """工具按钮必须有实体：1px 描边 + 淡纸底，悬停时描边转为 accent。"""
         button = QPushButton(label)
         button.setCursor(Qt.PointingHandCursor)
         button.setCheckable(False)
-        button.setMinimumHeight(theme.scale(28))
+        button.setMinimumHeight(theme.scale(30))
         button.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        button.setStyleSheet(
-            "QPushButton { padding: 5px 8px; border-radius: 8px; font-size: %dpx; color: %s; }"
-            "QPushButton:hover { background: rgba(127,110,88,26); }" % (theme.fs(13), theme.css("ink"))
-        )
+        button.setStyleSheet(self._tool_qss(False))
         layout.addWidget(button, 1)
         return button
 
+    @staticmethod
+    def _tool_qss(active: bool) -> str:
+        base = (
+            "QPushButton { border: 1px solid %s; background: %s; border-radius: 9px;"
+            " padding: 6px 10px; font-size: %dpx; color: %s; }"
+            "QPushButton:hover { border-color: %s; background: %s; }"
+            "QPushButton:pressed { background: %s; }"
+            % (
+                theme.css("rule"),
+                theme.css("paper_alt"),
+                theme.fs(13),
+                theme.css("ink"),
+                theme.css("accent"),
+                theme.css("popover"),
+                theme.css("accent_soft"),
+            )
+        )
+        if active:
+            base += (
+                "QPushButton { background: %s; border-color: %s; font-weight: 600; }"
+                % (theme.css("highlight"), theme.css("accent"))
+            )
+        return base
+
     def _set_active(self, button: QPushButton, label: str, active: bool) -> None:
         button.setText(("✓ " if active else "") + label)
-        if active:
-            button.setStyleSheet(
-                "QPushButton { padding: 5px 8px; border-radius: 8px; font-size: %dpx; color: %s;"
-                " background: %s; font-weight: 600; }" % (theme.fs(13), theme.css("ink"), theme.css("highlight"))
-            )
-        else:
-            button.setStyleSheet(
-                "QPushButton { padding: 5px 8px; border-radius: 8px; font-size: %dpx; color: %s; }"
-                "QPushButton:hover { background: rgba(127,110,88,26); }"
-                % (theme.fs(13), theme.css("ink"))
-            )
+        button.setStyleSheet(self._tool_qss(active))
 
     # ---------------------------------------------------------------- 打开
     def _bind_word(self, word: Word) -> None:
@@ -176,6 +188,13 @@ class ActionPopover(QFrame):
         self.show()
         self.raise_()
         self._place()
+        # 从被点词格的位置“长出来”：锚点落在浮层上沿，符合空间一致性
+        effect = motion.surface(self)
+        anchor_local = self.mapFromGlobal(self._anchor.center())
+        ox = 0.5 if not self.width() else max(0.0, min(1.0, anchor_local.x() / float(self.width())))
+        below = anchor_local.y() <= 0
+        motion.pop_in(self, origin=(ox, 0.0 if below else 1.0))
+        effect.set_lift(0.0)
 
     def _refresh_state(self) -> None:
         if not self.word:
@@ -201,8 +220,11 @@ class ActionPopover(QFrame):
         self.raise_()
 
     def close_popover(self) -> None:
-        self.hide()
+        if not self.isVisible():
+            self.word = None
+            return
         self.word = None
+        motion.pop_out(self, on_done=self.hide)
 
     # ---------------------------------------------------------------- AI
     def _on_ai(self) -> None:

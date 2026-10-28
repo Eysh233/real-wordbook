@@ -1,10 +1,19 @@
 """通用小组件：分段控件、Toast、卡片标题行。"""
 from typing import List, Sequence, Tuple
 
-from PyQt5.QtCore import QEasingCurve, QPropertyAnimation, Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import (
+    QEasingCurve,
+    QPropertyAnimation,
+    QRect,
+    Qt,
+    QTimer,
+    QVariantAnimation,
+    pyqtSignal,
+)
+from PyQt5.QtGui import QColor, QPainter
 from PyQt5.QtWidgets import (
     QFrame,
-    QGraphicsOpacityEffect,
+    QGraphicsDropShadowEffect,
     QHBoxLayout,
     QLabel,
     QPushButton,
@@ -13,11 +22,27 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from . import theme
+from . import motion, theme
+
+
+class _Pill(QWidget):
+    """分段控件里滑动的白色药丸：位置在按钮之间以 220ms 连续过渡。"""
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+        self._radius = 8
+
+    def paintEvent(self, event):  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setPen(Qt.NoPen)
+        painter.setBrush(QColor(theme.color("paper")))
+        painter.drawRoundedRect(self.rect(), self._radius, self._radius)
 
 
 class Segmented(QFrame):
-    """iOS 风格分段控件：单选、即时反馈。"""
+    """iOS 风格分段控件：选中态由滑动的药丸表达，而不是硬切背景色。"""
 
     changed = pyqtSignal(str)
 
@@ -27,6 +52,17 @@ class Segmented(QFrame):
         self.setSizePolicy(QSizePolicy.Maximum, QSizePolicy.Fixed)
         self._buttons = []  # type: List[QPushButton]
         self._current = current or (options[0][0] if options else "")
+        self._placed = False
+        self._pill = _Pill(self)
+        shadow = QGraphicsDropShadowEffect(self._pill)
+        shadow.setBlurRadius(10)
+        shadow.setOffset(0, 1)
+        shadow.setColor(QColor(0, 0, 0, 34))
+        self._pill.setGraphicsEffect(shadow)
+        self._slide = QPropertyAnimation(self._pill, b"geometry", self)
+        self._slide.setDuration(motion.ms(motion.PAGE_MS))
+        self._slide.setEasingCurve(QEasingCurve.OutCubic)
+
         layout = QHBoxLayout(self)
         layout.setContentsMargins(3, 3, 3, 3)
         layout.setSpacing(2)
@@ -42,19 +78,61 @@ class Segmented(QFrame):
             button.setProperty("segKey", key)
         self.set_value(self._current, emit=False)
 
+    # -- 药丸 ---------------------------------------------------------------
+    def _pill_rect(self, index: int) -> QRect:
+        if index < 0 or index >= len(self._buttons):
+            return QRect(3, 3, 0, self.height() - 6)
+        return self._buttons[index].geometry()
+
+    def _move_pill(self, animate: bool) -> None:
+        index = self._index_of(self._current)
+        target = self._pill_rect(index)
+        if target.width() <= 0:
+            return
+        self._pill.raise_()
+        if not animate or motion.reduced() or not self._placed:
+            self._slide.stop()
+            self._pill.setGeometry(target)
+        else:
+            self._slide.stop()
+            self._slide.setStartValue(self._pill.geometry())
+            self._slide.setEndValue(target)
+            self._slide.start()
+        for button in self._buttons:
+            button.raise_()
+        self._placed = True
+
+    def _index_of(self, key: str) -> int:
+        for index, button in enumerate(self._buttons):
+            if button.property("segKey") == key:
+                return index
+        return -1
+
+    # -- 对外 ---------------------------------------------------------------
     def value(self) -> str:
         return self._current
 
     def set_value(self, key: str, emit: bool = True) -> None:
+        if key == self._current and emit:
+            self._move_pill(animate=True)
         self._current = key
         for button in self._buttons:
             button.setChecked(button.property("segKey") == key)
+        self._move_pill(animate=self._placed)
         if emit:
             self.changed.emit(key)
 
+    def resizeEvent(self, event):  # noqa: N802
+        super().resizeEvent(event)
+        self._move_pill(animate=False)
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        self._move_pill(animate=False)
+
 
 class Toast(QLabel):
-    """轻量提示：出现 → 停留 → 淡出，不打断操作。"""
+    """轻量提示：自下方上浮 8px 淡入 → 停留 → 下沉淡出，不打断操作。"""
 
     def __init__(self, parent: QWidget) -> None:
         super().__init__(parent)
@@ -64,12 +142,8 @@ class Toast(QLabel):
         self.setAttribute(Qt.WA_TransparentForMouseEvents, True)
         self.hide()
         self._full_text = ""
-        self._effect = QGraphicsOpacityEffect(self)
-        self._effect.setOpacity(0.0)
-        self.setGraphicsEffect(self._effect)
-        self._anim = QPropertyAnimation(self._effect, b"opacity", self)
-        self._anim.setDuration(220)
-        self._anim.setEasingCurve(QEasingCurve.OutCubic)
+        self._effect = motion.surface(self)
+        self._effect.set_opacity(0.0)
         self._timer = QTimer(self)
         self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._fade_out)
@@ -84,22 +158,35 @@ class Toast(QLabel):
         self._reposition()
         self.show()
         self.raise_()
-        self._anim.stop()
-        self._anim.setStartValue(self._effect.opacity())
-        self._anim.setEndValue(1.0)
-        self._anim.start()
+        self._effect.set_opacity(0.0)
+        self._effect.set_lift(8.0)
+        motion.opacity_to(self, 1.0, motion.TOAST_MS, motion.EASE_OUT)
+        effect = self._effect
+        lift = QVariantAnimation(self)
+        lift.setDuration(motion.ms(motion.TOAST_MS))
+        lift.setStartValue(8.0)
+        lift.setEndValue(0.0)
+        lift.setEasingCurve(motion.EASE_OUT)
+        lift.valueChanged.connect(lambda v: effect.set_lift(float(v)))
+        lift.start()
+        self._lift_anim = lift
         self._timer.start(msec)
 
     def _fade_out(self) -> None:
-        self._anim.stop()
-        self._anim.setStartValue(self._effect.opacity())
-        self._anim.setEndValue(0.0)
-        try:
-            self._anim.finished.disconnect()
-        except TypeError:
-            pass
-        self._anim.finished.connect(self.hide)
-        self._anim.start()
+        motion.opacity_to(self, 0.0, 160, motion.EASE_IN)
+        previous = getattr(self, "_lift_anim", None)
+        if previous is not None:
+            previous.stop()
+        effect = self._effect
+        lift = QVariantAnimation(self)
+        lift.setDuration(motion.ms(160))
+        lift.setStartValue(self._effect.lift)
+        lift.setEndValue(-4.0)
+        lift.setEasingCurve(motion.EASE_IN)
+        lift.valueChanged.connect(lambda v: effect.set_lift(float(v)))
+        lift.finished.connect(self.hide)
+        lift.start()
+        self._lift_anim = lift
 
     def _reposition(self) -> None:
         parent = self.parentWidget()

@@ -1,7 +1,7 @@
 """单词书面板：导入的词汇书列表、进度、开始背书入口。"""
 from typing import Callable, List, Tuple
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtWidgets import (
     QFrame,
     QHBoxLayout,
@@ -15,7 +15,7 @@ from PyQt5.QtWidgets import (
 
 from ..models import Book
 from ..repositories import RecordsRepo
-from . import theme
+from . import motion, theme
 
 
 class BookCard(QFrame):
@@ -140,11 +140,13 @@ class BookPanel(QWidget):
         self._scroll.setWidgetResizable(True)
         self._scroll.setFrameShape(QFrame.NoFrame)
         self._holder = QWidget()
-        self._holder.setStyleSheet("background: transparent;")
+        self._holder.setObjectName("bookHolder")
+        self._holder.setStyleSheet("QWidget#bookHolder { background: transparent; }")
         self._list = QVBoxLayout(self._holder)
         self._list.setContentsMargins(0, 4, 8, 12)
         self._list.setSpacing(12)
         self._list.addStretch(1)
+        self._entrance = []
         self._scroll.setWidget(self._holder)
         root.addWidget(self._scroll, 1)
 
@@ -172,4 +174,19 @@ class BookPanel(QWidget):
                 card.exportRequested.connect(self.exportBook.emit)
                 card.removeRequested.connect(self.removeBook.emit)
                 self._list.addWidget(card)
+                self._entrance.append(card)
         self._list.addStretch(1)
+        QTimer.singleShot(0, self._play_entrance)
+
+    def _play_entrance(self) -> None:
+        """列表首次出现时错峰 40ms 上浮入场；只是装饰，不挡住任何点击。"""
+        cards, self._entrance = self._entrance, []
+        if not cards or motion.reduced():
+            return
+        for index, card in enumerate(cards[:6]):
+            motion.surface(card).set_opacity(0.0)
+            card._motion_press = False
+            QTimer.singleShot(
+                index * motion.STAGGER_MS,
+                lambda c=card: motion.pop_in(c, origin=(0.5, 0.5), start_scale=0.985, lift=8.0),
+            )

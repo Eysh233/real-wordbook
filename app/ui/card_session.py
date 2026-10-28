@@ -5,7 +5,15 @@
 from dataclasses import dataclass, field
 from typing import Any, Callable, List, Optional
 
-from PyQt5.QtCore import QEasingCurve, QPropertyAnimation, QRectF, Qt, pyqtSignal
+from PyQt5.QtCore import (
+    QEasingCurve,
+    QPoint,
+    QPropertyAnimation,
+    QRect,
+    QRectF,
+    Qt,
+    pyqtSignal,
+)
 from PyQt5.QtGui import QColor, QFont, QPainter
 from PyQt5.QtWidgets import (
     QFrame,
@@ -19,7 +27,7 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-from . import theme, widgets
+from . import motion, theme, widgets
 
 
 @dataclass
@@ -197,6 +205,9 @@ class CardSession(QWidget):
         self._hint.setAlignment(Qt.AlignCenter)
         root.addWidget(self._hint)
 
+        self._veil_t = 1.0
+        self._base_w = 640
+        self._base_h = 400
         self.hide()
 
     # ---------------------------------------------------------------- 展示
@@ -207,11 +218,67 @@ class CardSession(QWidget):
         self.show()
         self.raise_()
         self.setFocus(Qt.OtherFocusReason)
+        self._enter()
         self._index = 0
         self._known = 0
         self._answered = 0
         self._seen_sent = set()
         self._render()
+
+    def _enter(self) -> None:
+        """入场：遮罩 160ms 淡入，卡片从 0.96 尺寸长到 1（OutBack 微弹）。"""
+        self._fade_veil(1.0, 160, motion.EASE_OUT)
+        if motion.reduced():
+            self._card.setGeometry(self._rect_for(1.0))
+            return
+        self._card.setGeometry(self._rect_for(0.955))
+        anim = QPropertyAnimation(self._card, b"geometry", self)
+        anim.setDuration(motion.ms(motion.SHEET_MS))
+        anim.setStartValue(self._card.geometry())
+        anim.setEndValue(self._rect_for(1.0))
+        anim.setEasingCurve(motion.EASE_SETTLE)
+        anim.start()
+        self._enter_anim = anim
+
+    def _rect_for(self, factor: float) -> QRect:
+        width = int(self._base_w * factor)
+        height = int(self._base_h * factor)
+        return QRect(
+            int((self.width() - width) / 2),
+            int((self.height() - height) / 2),
+            width,
+            height,
+        )
+
+    def _fade_veil(self, target: float, duration: int, curve, on_done=None) -> None:
+        from PyQt5.QtCore import QVariantAnimation
+
+        anim = QVariantAnimation(self)
+        anim.setDuration(motion.ms(duration))
+        anim.setStartValue(float(self._veil_t))
+        anim.setEndValue(float(target))
+        anim.setEasingCurve(curve)
+        anim.valueChanged.connect(self._set_veil)
+        if on_done is not None:
+            anim.finished.connect(on_done)
+        anim.start()
+        self._veil_anim = anim
+
+    def _set_veil(self, value) -> None:
+        self._veil_t = float(value)
+        self.update()
+
+    def _slide(self, dx: int, duration: int, curve, on_done=None) -> None:
+        base = self._card.pos()
+        anim = QPropertyAnimation(self._card, b"pos", self)
+        anim.setDuration(motion.ms(duration))
+        anim.setStartValue(base)
+        anim.setEndValue(base + QPoint(dx, 0))
+        anim.setEasingCurve(curve)
+        if on_done is not None:
+            anim.finished.connect(on_done)
+        anim.start()
+        self._slide_anim = anim
 
     def _render(self) -> None:
         if not self.items or self._index >= len(self.items):
@@ -278,8 +345,20 @@ class CardSession(QWidget):
                 self._on_review(item, known)
             except Exception:  # noqa: BLE001
                 pass
-        self._index += 1
-        self._render()
+        if motion.reduced():
+            self._index += 1
+            self._render()
+            return
+        direction = -26 if known else 26
+        base = self._card.pos()
+
+        def advance() -> None:
+            self._index += 1
+            self._render()
+            self._card.move(base - QPoint(int(direction * 0.7), 0))
+            self._slide(int(direction * 0.7), motion.SWIPE_MS, motion.EASE_OUT)
+
+        self._slide(direction, motion.SWIPE_MS, motion.EASE_IN, advance)
 
     def _register(self) -> None:
         if not self.items or not self._on_register:
@@ -318,22 +397,26 @@ class CardSession(QWidget):
         self.finished.emit(
             {"total": len(self.items), "known": self._known, "answered": self._answered, "closed": True}
         )
-        self.hide()
+        if motion.reduced():
+            self.hide()
+            return
+        self._fade_veil(0.0, 140, motion.EASE_IN, self.hide)
 
     # ---------------------------------------------------------------- 事件
     def paintEvent(self, event):  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.fillRect(self.rect(), theme.veil_color())
+        color = theme.veil_color()
+        color.setAlphaF(max(0.0, min(1.0, color.alphaF() * self._veil_t)))
+        painter.fillRect(self.rect(), color)
         painter.end()
 
     def resizeEvent(self, event):  # noqa: N802
         super().resizeEvent(event)
-        width = min(640, max(400, int(self.width() * 0.58)))
-        height = min(400, max(320, int(self.height() * 0.5)))
-        x = int((self.width() - width) / 2)
-        y = int((self.height() - height) / 2)
-        self._card.setGeometry(x, y, width, height)
+        self._base_w = min(640, max(400, int(self.width() * 0.58)))
+        self._base_h = min(400, max(320, int(self.height() * 0.5)))
+        if not self.isVisible():
+            self._card.setGeometry(self._rect_for(1.0))
 
     def showEvent(self, event):  # noqa: N802
         super().showEvent(event)

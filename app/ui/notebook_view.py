@@ -4,14 +4,23 @@
 """
 from typing import List, Optional
 
-from PyQt5.QtCore import QElapsedTimer, QEasingCurve, QPropertyAnimation, QRectF, Qt, QTimer, pyqtSignal
+from PyQt5.QtCore import (
+    QEasingCurve,
+    QElapsedTimer,
+    QPropertyAnimation,
+    QRectF,
+    Qt,
+    QTimer,
+    QVariantAnimation,
+    pyqtSignal,
+)
 from PyQt5.QtGui import QColor, QFont, QLinearGradient, QPainter, QPen
 from PyQt5.QtWidgets import QGraphicsOpacityEffect, QPushButton, QWidget
 
 from .. import config
 from ..models import Word
 from ..services import paging
-from . import painter_utils, theme
+from . import motion, painter_utils, theme
 from .word_cell import WordCell
 
 SPINE_W = 54
@@ -37,6 +46,8 @@ class NotebookView(QWidget):
         self._cells: List[WordCell] = []
         self._anim: Optional[QPropertyAnimation] = None
         self._effect: Optional[QGraphicsOpacityEffect] = None
+        self._turn_alpha = 1.0
+        self._turn_dx = 0
         self._wheel_clock = QElapsedTimer()
         self._wheel_clock.start()
         self.setFocusPolicy(Qt.StrongFocus)
@@ -120,36 +131,51 @@ class NotebookView(QWidget):
         self.goto(self._index - 1)
 
     def _fade_to(self, target: int) -> None:
+        """翻页：旧页向侧向让位并淡出，新页从对侧轻微滑入。
+
+        位移只作用在纸页内容上（绘制时平移），不移动整个控件——否则书桌
+        背景会跟着抖动，看起来像窗口在晃。
+        """
+        direction = 1 if target > self._index else -1
         if self._anim is not None:
             self._anim.stop()
-        effect = QGraphicsOpacityEffect(self)
-        self.setGraphicsEffect(effect)
-        anim = QPropertyAnimation(effect, b"opacity", self)
-        anim.setDuration(100)
-        anim.setStartValue(1.0)
-        anim.setEndValue(0.0)
-        anim.setEasingCurve(QEasingCurve.OutCubic)
 
-        def halfway() -> None:
+        def animate(start_value, end_value, duration, curve, on_value, on_done=None):
+            anim = QVariantAnimation(self)
+            anim.setDuration(motion.ms(duration))
+            anim.setStartValue(float(start_value))
+            anim.setEndValue(float(end_value))
+            anim.setEasingCurve(curve)
+            anim.valueChanged.connect(on_value)
+            if on_done is not None:
+                anim.finished.connect(on_done)
+            anim.start()
+            self._anim = anim
+
+        def on_out(value):
+            value = float(value)
+            self._turn_alpha = value
+            self._turn_dx = -14 * direction * (1.0 - value)
+            self.update()
+
+        def switch():
             self._index = target
             self._rebuild_cells()
-            back = QPropertyAnimation(effect, b"opacity", self)
-            back.setDuration(170)
-            back.setStartValue(0.0)
-            back.setEndValue(1.0)
-            back.setEasingCurve(QEasingCurve.OutCubic)
-            back.finished.connect(self._clear_effect)
-            self._anim = back
-            back.start()
+            animate(0.0, 1.0, motion.PAGE_MS, motion.EASE_OUT, on_in, self._clear_turn)
 
-        anim.finished.connect(halfway)
-        self._anim = anim
-        anim.start()
+        def on_in(value):
+            value = float(value)
+            self._turn_alpha = value
+            self._turn_dx = 18 * direction * (1.0 - value)
+            self.update()
 
-    def _clear_effect(self) -> None:
-        self.setGraphicsEffect(None)
-        self._effect = None
+        animate(1.0, 0.0, 110, motion.EASE_IN, on_out, switch)
+
+    def _clear_turn(self) -> None:
+        self._turn_alpha = 1.0
+        self._turn_dx = 0
         self._anim = None
+        self.update()
 
     # ---------------------------------------------------------------- 布局
     def _paper_rect(self) -> QRectF:
@@ -239,6 +265,10 @@ class NotebookView(QWidget):
     def paintEvent(self, event):  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.fillRect(self.rect(), theme.color("desk"))
+        if self._turn_alpha < 1.0 or self._turn_dx:
+            painter.setOpacity(max(0.0, min(1.0, self._turn_alpha)))
+            painter.translate(self._turn_dx, 0)
         paper = self._paper_rect()
 
         # 投影 + 纸面

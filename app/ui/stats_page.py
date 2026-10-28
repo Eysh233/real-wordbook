@@ -162,7 +162,7 @@ class StatsPage(QWidget):
             frame.setObjectName("statCard")
             frame.setStyleSheet(
                 "#statCard { background: %s; border: 1px solid %s; border-radius: 14px; }"
-                % (theme.css("paper"), theme.css("rule"))
+                % (theme.css("popover"), theme.css("rule"))
             )
             box = QVBoxLayout(frame)
             box.setContentsMargins(16, 14, 16, 14)
@@ -180,7 +180,7 @@ class StatsPage(QWidget):
         heat_card = QWidget()
         heat_card.setStyleSheet(
             "#statCard { background: %s; border: 1px solid %s; border-radius: 14px; }"
-            % (theme.css("paper"), theme.css("rule"))
+            % (theme.css("popover"), theme.css("rule"))
         )
         heat_card.setObjectName("statCard")
         heat_card.setFixedHeight(theme.scale(292))
@@ -218,7 +218,7 @@ class StatsPage(QWidget):
         card.setObjectName("statCard")
         card.setStyleSheet(
             "#statCard { background: %s; border: 1px solid %s; border-radius: 14px; }"
-            % (theme.css("paper"), theme.css("rule"))
+            % (theme.css("popover"), theme.css("rule"))
         )
         outer = QVBoxLayout(card)
         outer.setContentsMargins(18, 14, 18, 14)

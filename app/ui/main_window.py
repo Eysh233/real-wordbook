@@ -32,7 +32,7 @@ from .. import config, storage
 from ..models import Book, BookWord, Word
 from ..repositories import BooksRepo, RecordsRepo, SecretRepo, SettingsRepo, StatsRepo, WordsRepo
 from ..services import ai_client, book_parser, csv_io, quiz as quiz_service, tts
-from . import theme
+from . import motion, theme
 from .action_popover import ActionPopover
 from .ai_worker import AIWorker
 from .book_panel import BookPanel
@@ -249,6 +249,7 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ 主题
     def _apply_theme(self) -> None:
+        motion.set_reduced(bool(getattr(self.settings, "reduced_motion", False)))
         app = QApplication.instance()
         if app is not None:
             app.setStyleSheet(theme.qss())

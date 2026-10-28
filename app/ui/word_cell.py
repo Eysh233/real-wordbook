@@ -1,12 +1,12 @@
 """单词格：纸页上的一个可点击词条，负责标注/划线的绘制。"""
-from PyQt5.QtCore import QRectF, Qt, pyqtSignal
+from PyQt5.QtCore import QRectF, Qt, QVariantAnimation, pyqtSignal
 from PyQt5.QtGui import QColor, QFont, QPainter, QPen
 from PyQt5.QtWidgets import QSizePolicy, QWidget
 
 from .. import config
 from ..models import Word
 from ..services import quiz as quiz_service
-from . import painter_utils, theme
+from . import motion, painter_utils, theme
 
 
 class WordCell(QWidget):
@@ -17,6 +17,7 @@ class WordCell(QWidget):
         self.word = word
         self.mode = mode
         self._hover = False
+        self._hover_t = 0.0
         self._pressed = False
         self._selected = False
         self.setCursor(Qt.PointingHandCursor)
@@ -54,14 +55,33 @@ class WordCell(QWidget):
     # ---------------------------------------------------------------- 交互
     def enterEvent(self, event):  # noqa: N802
         self._hover = True
-        self.update()
+        self._hover_t = 0.0
+        self._animate_hover(1.0)
         super().enterEvent(event)
 
     def leaveEvent(self, event):  # noqa: N802
         self._hover = False
         self._pressed = False
-        self.update()
+        self._animate_hover(0.0)
         super().leaveEvent(event)
+
+    def _animate_hover(self, target: float) -> None:
+        if motion.reduced():
+            self._hover_t = target
+            self.update()
+            return
+        anim = QVariantAnimation(self)
+        anim.setDuration(motion.HOVER_MS)
+        anim.setStartValue(float(self._hover_t))
+        anim.setEndValue(float(target))
+        anim.setEasingCurve(motion.EASE_OUT)
+        anim.valueChanged.connect(self._set_hover)
+        anim.start()
+        self._hover_anim = anim
+
+    def _set_hover(self, value) -> None:
+        self._hover_t = float(value)
+        self.update()
 
     def mousePressEvent(self, event):  # noqa: N802
         if event.button() == Qt.LeftButton:
@@ -84,9 +104,15 @@ class WordCell(QWidget):
         painter.setRenderHint(QPainter.TextAntialiasing, True)
 
         box = QRectF(self.rect()).adjusted(4, 1, -4, -1)
-        if self._hover or self._pressed:
-            tint = theme.color("accent")
-            tint.setAlpha(30 if self._pressed else 16)
+        tint = theme.color("accent")
+        if self._pressed:
+            tint.setAlpha(30)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(tint)
+            painter.drawRoundedRect(box, 8, 8)
+        elif self._hover_t > 0.01:
+            # 悬停底色随动画长大，不是突然出现
+            tint.setAlpha(int(16 * self._hover_t))
             painter.setPen(Qt.NoPen)
             painter.setBrush(tint)
             painter.drawRoundedRect(box, 8, 8)
