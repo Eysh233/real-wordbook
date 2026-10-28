@@ -1,0 +1,17 @@
+# Real Wordbook 依赖
+# 设计原则：标准库优先，第三方最小化
+# 本机实测：Python 3.8.6 已装 PyQt5 5.15.9
+
+# ---- 必需 ----
+PyQt5==5.15.9
+
+# ---- 可选：发音（F3，Windows SAPI 朗读）----
+# pywin32>=306
+
+# ---- 可选：调试/打包 ----
+# pyinstaller>=5.13
+
+# 说明：
+# 1) HTTP 使用标准库 urllib.request，不依赖 requests；
+# 2) YAML 头使用自实现极简解析，不依赖 PyYAML；
+# 3) 测试使用标准库 unittest，不依赖 pytest。

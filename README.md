@@ -1,2 +1,83 @@
-# real-wordbook
-仿真实笔记本布局的自定义单词本
+# Real Wordbook · 真实单词本
+
+一个运行在 Windows 上的本地背单词程序：主界面像一本真正的纸质笔记本，一页 9 行、每行 5 个词、按日期分页；可以登记单词、手绘感标注、调用 DeepSeek 解释、一键加权抽背，并导入标准化单词书追踪记忆进度。
+
+```
+┌───┬──────────────────────────────────────────────┐
+│ ○ │  2026-10-28 周三 · 今日登记 12 词             │
+│ ○ │  abandon      │  brief        │  …  共 5 列  │
+│ ○ │  /əˈbændən/   │  /briːf/      │              │
+│ ○ │ ──────────────────────────────────────────   │
+│ ○ │              P. 1 / 8                        │
+└───┴──────────────────────────────────────────────┘
+```
+
+## 当前状态
+
+| 阶段 | 内容 | 状态 |
+| --- | --- | --- |
+| M0 | 设计规范、单词书格式规范、技术选型、仓库初始化 | ✅ 已完成 |
+| M1–M7 | 数据层 → 笔记本界面 → 交互 → 抽背 → AI → 单词书 → 打磨 | ⏳ 待决策确认后开始 |
+
+## 文档
+
+| 文档 | 内容 |
+| --- | --- |
+| [docs/01-设计规范.md](docs/01-设计规范.md) | 完整设计规范：功能需求、界面与动效、数据模型、算法、AI 报文、模块划分、验收用例 |
+| [docs/02-单词书文件格式规范.md](docs/02-单词书文件格式规范.md) | `.md` 单词书的元数据、表格列序、校验规则、agent 转换指令 |
+| [docs/03-技术选型与决策点.md](docs/03-技术选型与决策点.md) | GUI/存储/HTTP 等方案对比，需确认的决策 D1–D3 |
+
+## 目录结构
+
+```
+app/           应用包（config / models / storage / repositories / services / ui）
+docs/          设计文档
+StudyBook/     导入的单词书（md）
+StudyRecord/   每个单词书的记忆进度（json）
+data/          运行时数据（我的单词本、设置、AI 缓存）——不入库
+tests/         服务层单元测试
+main.py        程序入口
+```
+
+## 运行
+
+```bash
+# 依赖：Python 3.8+、PyQt5（本机已装 5.15.9）
+pip install -r requirements.txt
+python main.py
+```
+
+## 数据与密钥
+
+- **API Key 只存** `%USERPROFILE%\.real_wordbook\config.json`，或被环境变量 `DEEPSEEK_API_KEY` 覆盖；**永不写入仓库**。
+- 我的单词本 `data/words.json`、设置 `data/settings.json`、AI 缓存 `data/ai_cache.json` 均在 `.gitignore` 内。
+- 单词书 md 入库以便版本管理；记忆进度按需入库（见 D2）。
+
+## 设计要点
+
+- **纸感**：米白纸页、装订脊螺旋孔、行分隔细线、衬线体单词、页脚页码。
+- **标注即权重**：默认 3；黄色荧光笔 → 6；细横线压字 → 1。抽背按权重加权随机（Efraimidis–Spirakis，无放回）。
+- **AI 是插件**：未配置 Key 时全部功能可用；请求走工作线程，结果按词缓存。
+- **数据是我的**：纯本地 JSON / Markdown，可 diff、可手改、可带走。
+
+## 许可
+
+个人学习用途。第三方库授权见 `requirements.txt` 注释。
+
+## 提交与推送
+
+本机直连 `github.com` 会被重置，已在本仓库 `.git/config` 内配置 HTTP 代理 `http://127.0.0.1:7897`（Clash 混合端口）。若代理端口变化：
+
+```bash
+git config --local http.proxy http://127.0.0.1:<PORT>
+# 或临时直连
+git config --local --unset http.proxy
+```
+
+首次推送需要 GitHub 身份认证（浏览器弹窗或 PAT），由本机 Credential Manager 记住：
+
+```bash
+git push -u origin main
+```
+
+之后每次 `git push` 不需要再输入。

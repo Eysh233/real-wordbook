@@ -1,0 +1,61 @@
+# ────────────────────────────
+# Real Wordbook · .gitignore
+# 原则：代码与文档入库；运行时数据与任何密钥一律不入库
+# ────────────────────────────
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+*.spec
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# ---- 虚拟环境 ----
+.venv/
+venv/
+env/
+ENV/
+
+# ---- 运行时数据（含密钥与个人词库）----
+# 决策 D2 默认：整个 data/ 不入库
+data/
+*.bak
+*.tmp
+*.log
+logs/
+
+# ---- 密钥与本地配置（多重保险）----
+.env
+.env.*
+*.local.json
+config.local.json
+settings.json
+ai_cache.json
+secrets/
+*.pem
+*.key
+deepseek_key*
+*apikey*
+*api_key*
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ---- 打包产物 ----
+*.exe
+*.msi
+*.zip
+
