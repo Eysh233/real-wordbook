@@ -117,31 +117,31 @@ class CardSession(QWidget):
 
         self._word = QLabel("")
         word_font = QFont(theme.SERIF)
-        word_font.setPixelSize(theme.fs(62))
+        word_font.setPixelSize(theme.fs(54))
         word_font.setWeight(QFont.DemiBold)
         self._word.setFont(word_font)
         self._word.setAlignment(Qt.AlignCenter)
         self._word.setWordWrap(True)
         self._word.setStyleSheet(
-            "color: %s; %s" % (theme.css("ink"), theme.font_css(62, theme.SERIF, 600))
+            "color: %s; %s" % (theme.css("ink"), theme.font_css(54, theme.SERIF, 600))
         )
         root.addWidget(self._word)
 
         self._phonetic = QLabel("")
         phon_font = QFont(theme.SERIF)
-        phon_font.setPixelSize(theme.fs(15))
+        phon_font.setPixelSize(theme.fs(14))
         phon_font.setItalic(True)
         self._phonetic.setFont(phon_font)
         self._phonetic.setAlignment(Qt.AlignCenter)
         self._phonetic.setStyleSheet(
-            "color: %s; %s" % (theme.css("ink_faint"), theme.font_css(15, theme.SERIF, italic=True))
+            "color: %s; %s" % (theme.css("ink_faint"), theme.font_css(13, theme.SERIF, italic=True))
         )
         root.addWidget(self._phonetic)
 
         root.addSpacing(theme.scale(8))
 
         reveal_box = QWidget(self._card)
-        reveal_box.setFixedHeight(theme.scale(128))
+        reveal_box.setFixedHeight(theme.scale(120))
         reveal_layout = QVBoxLayout(reveal_box)
         reveal_layout.setContentsMargins(0, 0, 0, 0)
         reveal_layout.setSpacing(8)
@@ -149,25 +149,25 @@ class CardSession(QWidget):
 
         self._meaning = QLabel("")
         mean_font = QFont(theme.SANS)
-        mean_font.setPixelSize(theme.fs(25))
+        mean_font.setPixelSize(theme.fs(23))
         self._meaning.setFont(mean_font)
         self._meaning.setAlignment(Qt.AlignCenter)
         self._meaning.setWordWrap(True)
         self._meaning.setStyleSheet(
-            "color: %s; %s" % (theme.css("ink"), theme.font_css(25, theme.SANS))
+            "color: %s; %s" % (theme.css("ink"), theme.font_css(23, theme.SANS))
         )
         self._meaning.hide()
         reveal_layout.addWidget(self._meaning)
 
         self._example = QLabel("")
         ex_font = QFont(theme.SERIF)
-        ex_font.setPixelSize(theme.fs(14))
+        ex_font.setPixelSize(theme.fs(13))
         ex_font.setItalic(True)
         self._example.setFont(ex_font)
         self._example.setAlignment(Qt.AlignCenter)
         self._example.setWordWrap(True)
         self._example.setStyleSheet(
-            "color: %s; %s" % (theme.css("ink_soft"), theme.font_css(14, theme.SERIF, italic=True))
+            "color: %s; %s" % (theme.css("ink_soft"), theme.font_css(13, theme.SERIF, italic=True))
         )
         self._example.hide()
         reveal_layout.addWidget(self._example)
@@ -214,8 +214,8 @@ class CardSession(QWidget):
         root.addWidget(self._hint)
 
         self._veil_t = 1.0
-        self._base_w = 740
-        self._base_h = 480
+        self._base_w = 700
+        self._base_h = 460
         self.hide()
 
     # ---------------------------------------------------------------- 展示
@@ -421,8 +421,8 @@ class CardSession(QWidget):
 
     def resizeEvent(self, event):  # noqa: N802
         super().resizeEvent(event)
-        self._base_w = min(740, max(460, int(self.width() * 0.64)))
-        self._base_h = min(480, max(380, int(self.height() * 0.58)))
+        self._base_w = min(700, max(440, int(self.width() * 0.62)))
+        self._base_h = min(460, max(370, int(self.height() * 0.55)))
         if not self.isVisible():
             self._card.setGeometry(self._rect_for(1.0))
 

@@ -45,6 +45,13 @@ class WordsRepo:
             {"schema": 1, "updated_at": _now_iso(), "words": [w.to_dict() for w in self._words]},
         )
 
+    def clear(self) -> int:
+        """清空我的单词本，返回被删除的词数。"""
+        removed = len(self._words)
+        self._words = []
+        self.save()
+        return removed
+
     # ---------------------------------------------------------------- 查询
     def all(self) -> List[Word]:
         return list(self._words)
@@ -329,6 +336,12 @@ class StatsRepo:
         day["quiz"] = int(day.get("quiz", 0)) + 1
         if correct:
             day["correct"] = int(day.get("correct", 0)) + 1
+        self.save()
+
+    def reset(self) -> None:
+        """清空抽背统计（正确率与每日量）。"""
+        self.data["quiz"] = {"total": 0, "correct": 0}
+        self.data["daily"] = {}
         self.save()
 
     def save(self) -> None:

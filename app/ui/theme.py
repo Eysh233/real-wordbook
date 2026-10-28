@@ -190,6 +190,12 @@ def qss() -> str:
     QPushButton#primary:hover { background: %(accent)s; }
     QPushButton#ghost { border: 1px solid %(rule)s; padding: 6px 12px; }
     QPushButton#ghost:hover { background: %(paper_alt)s; }
+    QPushButton#danger {
+        color: %(danger)s; background: transparent; border: 1px solid %(danger)s;
+        border-radius: 9px; padding: 6px 14px; font-weight: 600;
+    }
+    QPushButton#danger:hover { background: rgba(178, 74, 60, 26); }
+    QPushButton#danger:disabled { color: %(ink_faint)s; border-color: %(rule)s; }
     QPushButton#danger { color: %(danger)s; }
     /* 文字型按钮也必须有按钮实体：淡底 + 1px 描边，悬停加深，按下压暗 */
     QPushButton#link {

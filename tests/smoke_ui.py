@@ -207,7 +207,16 @@ def main() -> int:
     win._refresh_words()
     app.processEvents()
 
-    print("[10] 关闭窗口")
+    print("[10] 清空我的单词本")
+    before = len(win.words_repo.all())
+    removed = win._clear_wordbook()
+    app.processEvents()
+    check(removed == before and before > 0, "清空返回删除数 %d" % removed)
+    check(not win.words_repo.all(), "单词本已空")
+    check(win.stats_repo.accuracy() == 0.0, "抽背统计已重置")
+    check(win.view.total_pages() == 0, "笔记本回到空状态")
+
+    print("[11] 关闭窗口")
     win.close()
     app.processEvents()
     print("\nSMOKE OK · 临时目录 %s" % TMP)

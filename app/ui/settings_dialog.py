@@ -23,8 +23,9 @@ from . import theme
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, settings: Settings, secret: SecretRepo, parent=None) -> None:
+    def __init__(self, settings: Settings, secret: SecretRepo, parent=None, on_clear_words=None) -> None:
         super().__init__(parent)
+        self._on_clear_words = on_clear_words
         self.setWindowTitle("设置")
         self.setModal(True)
         self.setMinimumWidth(theme.scale(520))
@@ -111,6 +112,29 @@ class SettingsDialog(QDialog):
         note.setWordWrap(True)
         root.addWidget(note)
 
+        divider = QFrame(self)
+        divider.setObjectName("divider")
+        divider.setFixedHeight(1)
+        root.addWidget(divider)
+
+        danger_row = QHBoxLayout()
+        danger_row.setSpacing(12)
+        danger_text = QLabel("清空「我的单词本」：删除全部词条，并重置抽背记录与统计。单词书与背书进度不受影响。")
+        danger_text.setObjectName("faint")
+        danger_text.setWordWrap(True)
+        danger_row.addWidget(danger_text, 1)
+        self._clear_btn = QPushButton("清空…")
+        self._clear_btn.setObjectName("danger")
+        self._clear_btn.setCursor(Qt.PointingHandCursor)
+        self._clear_btn.setEnabled(on_clear_words is not None)
+        self._clear_btn.clicked.connect(self._clear_words)
+        danger_row.addWidget(self._clear_btn)
+        root.addLayout(danger_row)
+
+        self._clear_note = QLabel("")
+        self._clear_note.setStyleSheet("color: %s; %s" % (theme.css("ink_faint"), theme.font_css(11, theme.SANS)))
+        root.addWidget(self._clear_note)
+
         root.addStretch(1)
         buttons = QHBoxLayout()
         buttons.addStretch(1)
@@ -122,6 +146,23 @@ class SettingsDialog(QDialog):
         save.clicked.connect(self._save)
         buttons.addWidget(save)
         root.addLayout(buttons)
+
+    def _clear_words(self) -> None:
+        from .dialogs import ClearConfirmDialog
+
+        dialog = ClearConfirmDialog(
+            "清空「我的单词本」？",
+            "我的单词本里的全部词条会被删除，抽背记录与统计一并清零。此操作不可撤销，"
+            "想留底请先在「⋯ → 导出 CSV」里备份。",
+            confirm_text="确认清空",
+            parent=self,
+        )
+        if dialog.exec_() != QDialog.Accepted:
+            return
+        removed = 0
+        if self._on_clear_words is not None:
+            removed = self._on_clear_words() or 0
+        self._clear_note.setText("已清空我的单词本（%d 个词）。" % removed)
 
     def _labeled(self, text: str, field) -> QWidget:
         holder = QWidget(self)

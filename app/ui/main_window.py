@@ -287,6 +287,15 @@ class MainWindow(QMainWindow):
         self._on_nav(("book", "study", "stats")[page])
 
     # ------------------------------------------------------------------ 数据
+    def _clear_wordbook(self) -> int:
+        """清空我的单词本与抽背统计（设置页「清空…」的动作，已在弹窗里二次确认）。"""
+        self._close_popover()
+        removed = self.words_repo.clear()
+        self.stats_repo.reset()
+        self.reload_all()
+        self._toast.show_message("已清空我的单词本（%d 词）" % removed)
+        return removed
+
     def reload_all(self) -> None:
         self._words = self.words_repo.all()
         self._refresh_tags()
@@ -844,7 +853,9 @@ class MainWindow(QMainWindow):
         self.activateWindow()
 
     def open_settings(self) -> None:
-        dialog = SettingsDialog(self.settings, self.secret_repo, self)
+        dialog = SettingsDialog(
+            self.settings, self.secret_repo, self, on_clear_words=self._clear_wordbook
+        )
         if dialog.exec_() != QDialog.Accepted:
             return
         new_settings = dialog.result_settings()

@@ -1,7 +1,7 @@
 """各类对话框：登记/编辑单词、单词书背诵选项、词根视图、拼写测试。"""
 from typing import Callable, Dict, List, Optional, Tuple
 
-from PyQt5.QtCore import Qt, pyqtSignal
+from PyQt5.QtCore import Qt, QTimer, pyqtSignal
 from PyQt5.QtGui import QFont
 from PyQt5.QtWidgets import (
     QComboBox,
@@ -434,3 +434,79 @@ class SpellingDialog(QDialog):
         from PyQt5.QtCore import QTimer
 
         QTimer.singleShot(700, self._load)
+
+
+class ClearConfirmDialog(QDialog):
+    """危险操作确认：确认按钮先禁用，倒计时 2 秒后才能点。"""
+
+    HOLD_MS = 2000
+
+    def __init__(
+        self,
+        title: str,
+        message: str,
+        confirm_text: str = "确认清空",
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(title)
+        self.setModal(True)
+        self.setMinimumWidth(theme.scale(430))
+
+        root = QVBoxLayout(self)
+        root.setContentsMargins(theme.scale(22), theme.scale(20), theme.scale(22), theme.scale(18))
+        root.setSpacing(theme.scale(10))
+
+        head = QLabel(title)
+        head.setWordWrap(True)
+        head.setStyleSheet(
+            "color: %s; %s" % (theme.css("danger"), theme.font_css(17, theme.SANS, 600))
+        )
+        root.addWidget(head)
+
+        body = QLabel(message)
+        body.setWordWrap(True)
+        body.setStyleSheet("color: %s; %s" % (theme.css("ink_soft"), theme.font_css(12, theme.SANS)))
+        root.addWidget(body)
+
+        self._count = QLabel("")
+        self._count.setStyleSheet("color: %s; %s" % (theme.css("ink_faint"), theme.font_css(11, theme.SANS)))
+        root.addWidget(self._count)
+
+        root.addSpacing(theme.scale(4))
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        cancel = QPushButton("取消")
+        cancel.setObjectName("ghost")
+        cancel.clicked.connect(self.reject)
+        buttons.addWidget(cancel)
+        self._ok = QPushButton(confirm_text)
+        self._ok.setObjectName("danger")
+        self._ok.setEnabled(False)
+        self._ok.clicked.connect(self.accept)
+        buttons.addWidget(self._ok)
+        root.addLayout(buttons)
+
+        self._label = confirm_text
+        self._left = self.HOLD_MS
+        self._render()
+        self._timer = QTimer(self)
+        self._timer.setInterval(100)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start()
+
+    def _render(self) -> None:
+        if self._left > 0:
+            self._ok.setText("%s（%d）" % (self._label, int((self._left + 999) // 1000)))
+            self._count.setText("为防止误触，%d 秒后才能确认。" % int((self._left + 999) // 1000))
+        else:
+            self._ok.setText(self._label)
+            self._ok.setEnabled(True)
+            self._count.setText("可以确认了。")
+
+    def _tick(self) -> None:
+        self._left -= self._timer.interval()
+        if self._left <= 0:
+            self._left = 0
+            self._timer.stop()
+        self._render()
