@@ -34,6 +34,7 @@ config.ensure_dirs()
 
 from app.repositories import BooksRepo, RecordsRepo  # noqa: E402
 from app.services import book_parser  # noqa: E402
+from app.services import ai_client  # noqa: E402
 from app.ui.main_window import MainWindow  # noqa: E402
 
 
@@ -222,7 +223,18 @@ def main() -> int:
     check(win.stats_repo.accuracy() == 0.0, "抽背统计已重置")
     check(win.view.total_pages() == 0, "笔记本回到空状态")
 
-    print("[11] 关闭窗口")
+    print("[11] 清除 AI 解释缓存")
+    cache = ai_client.AICache()
+    cache.put("smoke", config.AI_MODEL, {"word": "smoke", "translation_cn": "烟"})
+    check(cache.count() > 0, "缓存已写入 %d 条" % cache.count())
+    cached_before = cache.count()
+    cache_removed = win._clear_ai_cache()
+    app.processEvents()
+    check(cache_removed == cached_before, "清除返回条数 %d" % cache_removed)
+    check(ai_client.AICache().count() == 0, "缓存文件已清空")
+    check(len(win.words_repo.all()) == 0, "清缓存不影响单词本")
+
+    print("[12] 关闭窗口")
     win.close()
     app.processEvents()
     print("\nSMOKE OK · 临时目录 %s" % TMP)

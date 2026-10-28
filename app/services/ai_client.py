@@ -295,3 +295,13 @@ class AICache:
     def put(self, word: str, model: str, value: Dict[str, Any]) -> None:
         self.data[self.key(word, model)] = value
         storage.write_json_atomic(self.path, self.data)
+
+    def count(self) -> int:
+        return len(self.data)
+
+    def clear(self) -> int:
+        """清空本地解释缓存，返回清掉的条数。"""
+        removed = len(self.data)
+        self.data = {}
+        storage.write_json_atomic(self.path, self.data)
+        return removed

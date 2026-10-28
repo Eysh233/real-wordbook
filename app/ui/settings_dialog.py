@@ -23,9 +23,17 @@ from . import theme
 
 
 class SettingsDialog(QDialog):
-    def __init__(self, settings: Settings, secret: SecretRepo, parent=None, on_clear_words=None) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        secret: SecretRepo,
+        parent=None,
+        on_clear_words=None,
+        on_clear_ai_cache=None,
+    ) -> None:
         super().__init__(parent)
         self._on_clear_words = on_clear_words
+        self._on_clear_ai_cache = on_clear_ai_cache
         self.setWindowTitle("设置")
         self.setModal(True)
         self.setMinimumWidth(theme.scale(520))
@@ -59,7 +67,7 @@ class SettingsDialog(QDialog):
         clear_btn.setCursor(Qt.PointingHandCursor)
         clear_btn.setVisible(bool(existing))
         clear_btn.clicked.connect(self._clear_key)
-        self._clear_btn = clear_btn
+        self._key_clear_btn = clear_btn
         key_row.addWidget(clear_btn)
         root.addWidget(self._labeled("DeepSeek API Key", key_row))
 
@@ -123,17 +131,39 @@ class SettingsDialog(QDialog):
         danger_text.setObjectName("faint")
         danger_text.setWordWrap(True)
         danger_row.addWidget(danger_text, 1)
-        self._clear_btn = QPushButton("清空…")
-        self._clear_btn.setObjectName("danger")
-        self._clear_btn.setCursor(Qt.PointingHandCursor)
-        self._clear_btn.setEnabled(on_clear_words is not None)
-        self._clear_btn.clicked.connect(self._clear_words)
-        danger_row.addWidget(self._clear_btn)
+        self._words_clear_btn = QPushButton("清空…")
+        self._words_clear_btn.setObjectName("danger")
+        self._words_clear_btn.setCursor(Qt.PointingHandCursor)
+        self._words_clear_btn.setEnabled(on_clear_words is not None)
+        self._words_clear_btn.clicked.connect(self._clear_words)
+        danger_row.addWidget(self._words_clear_btn)
         root.addLayout(danger_row)
 
         self._clear_note = QLabel("")
         self._clear_note.setStyleSheet("color: %s; %s" % (theme.css("ink_faint"), theme.font_css(11, theme.SANS)))
         root.addWidget(self._clear_note)
+
+        cache_row = QHBoxLayout()
+        cache_row.setSpacing(12)
+        cache_text = QLabel(
+            "清除 AI 解释缓存：删掉本地缓存的解释结果，下次点「AI解释」会重新请求（不删单词，也不清统计）。"
+        )
+        cache_text.setObjectName("faint")
+        cache_text.setWordWrap(True)
+        cache_row.addWidget(cache_text, 1)
+        self._cache_clear_btn = QPushButton("清除…")
+        self._cache_clear_btn.setObjectName("danger")
+        self._cache_clear_btn.setCursor(Qt.PointingHandCursor)
+        self._cache_clear_btn.setEnabled(on_clear_ai_cache is not None)
+        self._cache_clear_btn.clicked.connect(self._clear_ai_cache)
+        cache_row.addWidget(self._cache_clear_btn)
+        root.addLayout(cache_row)
+
+        self._cache_note = QLabel("")
+        self._cache_note.setStyleSheet(
+            "color: %s; %s" % (theme.css("ink_faint"), theme.font_css(11, theme.SANS))
+        )
+        root.addWidget(self._cache_note)
 
         root.addStretch(1)
         buttons = QHBoxLayout()
@@ -163,6 +193,23 @@ class SettingsDialog(QDialog):
         if self._on_clear_words is not None:
             removed = self._on_clear_words() or 0
         self._clear_note.setText("已清空我的单词本（%d 个词）。" % removed)
+
+    def _clear_ai_cache(self) -> None:
+        from .dialogs import ClearConfirmDialog
+
+        dialog = ClearConfirmDialog(
+            "清除 AI 解释缓存？",
+            "本地缓存的 AI 解释会被全部删除，单词、单词本与统计不受影响。"
+            "之后点「AI解释」会重新向 DeepSeek 请求，可能产生费用。",
+            confirm_text="确认清除",
+            parent=self,
+        )
+        if dialog.exec_() != QDialog.Accepted:
+            return
+        removed = 0
+        if self._on_clear_ai_cache is not None:
+            removed = self._on_clear_ai_cache() or 0
+        self._cache_note.setText("已清除 AI 解释缓存（%d 条）。" % removed)
 
     def _labeled(self, text: str, field) -> QWidget:
         holder = QWidget(self)

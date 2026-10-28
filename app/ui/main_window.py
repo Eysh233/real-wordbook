@@ -292,6 +292,13 @@ class MainWindow(QMainWindow):
         self._toast.show_message("已清空我的单词本（%d 词）" % removed)
         return removed
 
+    def _clear_ai_cache(self) -> int:
+        """清掉本地 AI 解释缓存（设置页「清除…」的动作，已在弹窗里二次确认）。"""
+        self._close_popover()
+        removed = ai_client.AICache().clear()
+        self._toast.show_message("已清除 AI 解释缓存（%d 条）" % removed)
+        return removed
+
     def reload_all(self) -> None:
         self._words = self.words_repo.all()
         self._refresh_tags()
@@ -916,7 +923,11 @@ class MainWindow(QMainWindow):
 
     def open_settings(self) -> None:
         dialog = SettingsDialog(
-            self.settings, self.secret_repo, self, on_clear_words=self._clear_wordbook
+            self.settings,
+            self.secret_repo,
+            self,
+            on_clear_words=self._clear_wordbook,
+            on_clear_ai_cache=self._clear_ai_cache,
         )
         if dialog.exec_() != QDialog.Accepted:
             return
