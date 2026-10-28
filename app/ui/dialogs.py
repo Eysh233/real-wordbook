@@ -239,34 +239,39 @@ class RootsDialog(QDialog):
         title = QLabel("词根聚合")
         title.setObjectName("h1")
         root.addWidget(title)
-        hint = QLabel("从备注与 AI 拆解里提取词根；在备注里写「词根: spect」即可手动归类。")
+        hint = QLabel(
+            "词根来自 AI 归类或备注里的「词根: spect」；右上角「⋯ → 自动归类词根…」可让 AI 批量分类。"
+        )
         hint.setObjectName("faint")
         hint.setWordWrap(True)
         root.addWidget(hint)
 
         self._tree = QTreeWidget(self)
-        self._tree.setHeaderLabels(["词根 / 单词", "中文", "词性"])
+        self._tree.setHeaderLabels(["词根 / 单词", "词根含义", "中文", "词性"])
         self._tree.setColumnWidth(0, theme.scale(220))
         self._tree.setAlternatingRowColors(False)
         root.addWidget(self._tree, 1)
 
         groups = roots_service.group_by_root(words)
         for root, items in groups.items():
-            parent_item = QTreeWidgetItem(["%s（%d）" % (root, len(items)), "", ""])
+            root_cn = next((w.root_cn for w in items if getattr(w, "root_cn", "")), "")
+            parent_item = QTreeWidgetItem(
+                ["%s（%d）" % (root, len(items)), root_cn, "", ""]
+            )
             font = parent_item.font(0)
             font.setBold(True)
             parent_item.setFont(0, font)
             self._tree.addTopLevelItem(parent_item)
             for word in items:
-                child = QTreeWidgetItem([word.word, word.meaning_cn, word.pos])
+                child = QTreeWidgetItem([word.word, "", word.meaning_cn, word.pos])
                 parent_item.addChild(child)
             parent_item.setExpanded(True)
         loose = roots_service.ungrouped(words)
         if loose:
-            other = QTreeWidgetItem(["未归类（%d）" % len(loose), "", ""])
+            other = QTreeWidgetItem(["未归类（%d）" % len(loose), "", "", ""])
             self._tree.addTopLevelItem(other)
             for word in loose:
-                other.addChild(QTreeWidgetItem([word.word, word.meaning_cn, word.pos]))
+                other.addChild(QTreeWidgetItem([word.word, "", word.meaning_cn, word.pos]))
         if not groups and not loose:
             self._tree.addTopLevelItem(QTreeWidgetItem(["还没有单词", "", ""]))
 

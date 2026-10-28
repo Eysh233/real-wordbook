@@ -33,3 +33,35 @@ class AIWorker(QThread):
             self.failed.emit(self._word.id, str(exc))
             return
         self.done.emit(self._word.id, data)
+
+
+class RootWorker(QThread):
+    """批量词根归类：单独线程跑，避免一次性几十个单词把界面卡住。"""
+
+    done = pyqtSignal(dict)
+    failed = pyqtSignal(str)
+    progress = pyqtSignal(int, int)
+
+    def __init__(self, entries, api_key: str, model: str, effort: str, parent=None) -> None:
+        super().__init__(parent)
+        self._entries = list(entries)
+        self._api_key = api_key
+        self._model = model
+        self._effort = effort
+
+    def run(self) -> None:  # noqa: D401 - QThread 入口
+        try:
+            data = ai_client.classify_roots(
+                self._entries,
+                api_key=self._api_key,
+                model=self._model,
+                effort=self._effort,
+                on_progress=lambda done, total: self.progress.emit(done, total),
+            )
+        except ai_client.AIError as exc:
+            self.failed.emit(exc.message)
+            return
+        except Exception as exc:  # noqa: BLE001
+            self.failed.emit(str(exc))
+            return
+        self.done.emit(data)

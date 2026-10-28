@@ -7,6 +7,7 @@ from typing import Any, Callable, List, Optional
 
 from PyQt5.QtCore import (
     QEasingCurve,
+    QEvent,
     QPoint,
     QPropertyAnimation,
     QRect,
@@ -14,8 +15,9 @@ from PyQt5.QtCore import (
     Qt,
     pyqtSignal,
 )
-from PyQt5.QtGui import QColor, QFont, QPainter
+from PyQt5.QtGui import QColor, QFont, QKeySequence, QPainter
 from PyQt5.QtWidgets import (
+    QApplication,
     QFrame,
     QGraphicsDropShadowEffect,
     QGraphicsOpacityEffect,
@@ -23,6 +25,7 @@ from PyQt5.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QShortcut,
     QVBoxLayout,
     QWidget,
 )
@@ -73,6 +76,21 @@ class CardSession(QWidget):
         self._anim = None
         self.setFocusPolicy(Qt.StrongFocus)
         self.setAttribute(Qt.WA_StyledBackground, False)
+        # 键盘兜底：焦点落在按钮上时 keyPressEvent 收不到按键，统一用应用级快捷键接管
+        self._shortcuts = []
+        # 注意：不要再注册 Esc 快捷键——主窗已有一个窗口级 Esc（main_window._escape 会先处理会话），
+        # 两个 Esc 同时存在会触发 Qt 的 ambiguous shortcut，结果两个都不响应。
+        for key, slot in (
+            (Qt.Key_Space, self._on_space),
+            (Qt.Key_Right, lambda: self._answer(True)),
+            (Qt.Key_Left, lambda: self._answer(False)),
+            (Qt.Key_Down, self._on_space),
+        ):
+            sc = QShortcut(QKeySequence(key), self)
+            sc.setContext(Qt.ApplicationShortcut)
+            sc.setEnabled(False)
+            sc.activated.connect(slot)
+            self._shortcuts.append(sc)
 
         self._card = QFrame(self)
         self._card.setObjectName("sheet")
@@ -356,6 +374,7 @@ class CardSession(QWidget):
         if motion.reduced():
             self._index += 1
             self._render()
+            self.setFocus(Qt.OtherFocusReason)
             return
         direction = -26 if known else 26
         base = self._card.pos()
@@ -365,6 +384,7 @@ class CardSession(QWidget):
             self._render()
             self._card.move(base - QPoint(int(direction * 0.7), 0))
             self._slide(int(direction * 0.7), motion.SWIPE_MS, motion.EASE_OUT)
+            self.setFocus(Qt.OtherFocusReason)
 
         self._slide(direction, motion.SWIPE_MS, motion.EASE_IN, advance)
 
@@ -430,6 +450,47 @@ class CardSession(QWidget):
         super().showEvent(event)
         self.setGeometry(self.parentWidget().rect())
         self.raise_()
+        self.setFocus(Qt.OtherFocusReason)
+        self._enable_shortcuts(True)
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
+
+    def hideEvent(self, event):  # noqa: N802
+        self._enable_shortcuts(False)
+        app = QApplication.instance()
+        if app is not None:
+            app.removeEventFilter(self)
+        super().hideEvent(event)
+
+    def eventFilter(self, obj, event):  # noqa: N802
+        """会话可见时接管 Esc / 空格 / ←→，焦点在按钮上也照样管用。"""
+        if self.isVisible() and event.type() == QEvent.KeyPress:
+            if QApplication.activeModalWidget() is None:
+                key = event.key()
+                if key == Qt.Key_Escape:
+                    self.close_session()
+                    return True
+                if key in (Qt.Key_Space, Qt.Key_Down):
+                    self._on_space()
+                    return True
+                if key == Qt.Key_Right:
+                    self._answer(True)
+                    return True
+                if key == Qt.Key_Left:
+                    self._answer(False)
+                    return True
+        return super().eventFilter(obj, event)
+
+    def _enable_shortcuts(self, enabled: bool) -> None:
+        for shortcut in getattr(self, "_shortcuts", []):
+            shortcut.setEnabled(enabled)
+
+    def _on_space(self) -> None:
+        if not self._revealed:
+            self.reveal()
+        else:
+            self._answer(True)
 
     def keyPressEvent(self, event):  # noqa: N802
         key = event.key()

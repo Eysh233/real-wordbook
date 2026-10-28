@@ -36,6 +36,27 @@ USER_TEMPLATE = """请为一单词生成学习卡片，JSON 字段：
 """
 
 
+ROOT_SYSTEM_PROMPT = (
+    "你是英语构词法专家。请为每个单词给出最贴切的词根（拉丁/希腊词根，小写、不带连字符），"
+    "以及该词根的中文含义。输出严格 JSON，不要任何多余文字。"
+)
+
+ROOT_USER_TEMPLATE = """请为下面每个单词给出词根，JSON 格式：
+{{"roots": [{{"word": "原词（原样返回）", "root": "词根，如 spect", "root_cn": "词根含义，如 看"}}]}}
+
+要求：
+- 每行一个 {word}｜{meaning}｜{pos}，共 {count} 个，必须全部返回，顺序不限；
+- 找不到可靠词根的单词，root 填 ""（空字符串），不要硬编；
+- root 只用小写字母，不带连字符；
+- 不要输出任何解释文字。
+
+单词列表：
+{lines}
+"""
+
+ROOT_CHUNK = 24
+
+
 class AIError(Exception):
     def __init__(self, message: str, code: int = 0) -> None:
         super().__init__(message)
@@ -176,6 +197,81 @@ def explain(
     if not isinstance(parsed, dict):
         raise AIError("模型返回的 JSON 不是对象")
     return _normalize(parsed, word.strip())
+
+
+def build_root_payload(
+    items: list, model: str, effort: str, prompt_ver: int = 0
+) -> Dict[str, Any]:
+    effort = effort if effort in ("low", "high", "max") else "low"
+    lines = "\n".join(
+        "%s｜%s｜%s" % (w, (m or "（未填）"), (pos or "（未填）")) for w, m, pos in items
+    )
+    user = ROOT_USER_TEMPLATE.format(
+        word="单词", meaning="中文", pos="词性", count=len(items), lines=lines
+    )
+    return {
+        "model": model or config.AI_MODEL,
+        "messages": [
+            {"role": "system", "content": ROOT_SYSTEM_PROMPT},
+            {"role": "user", "content": user},
+        ],
+        "reasoning_effort": effort,
+        "thinking": {"type": "enabled"},
+        "response_format": {"type": "json_object"},
+        "max_tokens": config.AI_MAX_TOKENS,
+    }
+
+
+def classify_roots(
+    entries: list,
+    api_key: str,
+    model: str = config.AI_MODEL,
+    effort: str = config.AI_EFFORT,
+    timeout: int = config.AI_TIMEOUT,
+    on_progress=None,
+) -> Dict[str, Dict[str, str]]:
+    """给一批 (word, meaning, pos) 求词根，返回 {小写单词: {root, root_cn}}。
+
+    按 ROOT_CHUNK 分批请求，单批失败不影响其它批；on_progress(done, total) 用于回报进度。
+    """
+    if not api_key:
+        raise AIError("未配置 API Key，请在「设置」中填写")
+    result: Dict[str, Dict[str, str]] = {}
+    total = len(entries)
+    for start in range(0, total, ROOT_CHUNK):
+        chunk = entries[start : start + ROOT_CHUNK]
+        payload = build_root_payload(chunk, model, effort)
+        data = _post(payload, api_key, timeout)
+        try:
+            content = data["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError):
+            raise AIError("响应结构异常（缺少 choices）")
+        if isinstance(content, dict):
+            parsed = content
+        else:
+            text = str(content or "").strip()
+            if text.startswith("```"):
+                text = text.strip("`")
+                if text.lower().startswith("json"):
+                    text = text[4:]
+            try:
+                parsed = json.loads(text)
+            except ValueError:
+                raise AIError("模型未返回合法 JSON")
+        rows = parsed.get("roots") if isinstance(parsed, dict) else None
+        if not isinstance(rows, list):
+            raise AIError("模型返回的 JSON 缺少 roots 数组")
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            name = str(row.get("word", "")).strip().lower()
+            root = str(row.get("root", "")).strip().lower().strip("-")
+            root_cn = str(row.get("root_cn", "")).strip()
+            if name:
+                result[name] = {"root": root, "root_cn": root_cn}
+        if on_progress is not None:
+            on_progress(min(total, start + len(chunk)), total)
+    return result
 
 
 class AICache:

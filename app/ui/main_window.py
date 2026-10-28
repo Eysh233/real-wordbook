@@ -31,10 +31,10 @@ from PyQt5.QtWidgets import (
 from .. import config, storage
 from ..models import Book, BookWord, Word
 from ..repositories import BooksRepo, RecordsRepo, SecretRepo, SettingsRepo, StatsRepo, WordsRepo
-from ..services import ai_client, book_parser, csv_io, quiz as quiz_service, tts
+from ..services import ai_client, book_parser, csv_io, quiz as quiz_service, roots as roots_service, tts
 from . import motion, theme
 from .action_popover import ActionPopover
-from .ai_worker import AIWorker
+from .ai_worker import AIWorker, RootWorker
 from .book_panel import BookPanel
 from .card_session import CardSession, SessionItem
 from .dialogs import AddWordDialog, RootsDialog, SpellingDialog, StudyOptionsDialog
@@ -201,6 +201,7 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         menu.addAction("拼写测试", self.spelling_test)
         menu.addAction("词根视图", self.open_roots)
+        menu.addAction("自动归类词根…", self.classify_roots)
         menu.addSeparator()
         menu.addAction("导入 CSV", self.import_csv)
         menu.addAction("导出 CSV", self.export_csv)
@@ -788,6 +789,72 @@ class MainWindow(QMainWindow):
             self._toast_message("单词本还是空的")
             return
         RootsDialog(self._words, self).exec_()
+
+    # ------------------------------------------------------------ 词根归类
+    def classify_roots(self) -> None:
+        """把「还没有词根」的单词一次性交给 DeepSeek，结果写回单词。"""
+        if not self._words:
+            self._toast_message("单词本还是空的")
+            return
+        pending = roots_service.ungrouped(self._words)
+        if not pending:
+            QMessageBox.information(self, "自动归类词根", "所有单词都已经有词根了，不需要再归类。")
+            return
+        api_key = self.secret_repo.api_key
+        if not api_key:
+            QMessageBox.warning(
+                self, "自动归类词根", "还没有配置 DeepSeek API Key。\n请先在「设置」里填写，再试一次。"
+            )
+            return
+        entries = [(word.word, word.meaning_cn, word.pos) for word in pending]
+        self._toast_message("正在把 %d 个单词提交给 DeepSeek 归类词根…" % len(entries))
+        worker = RootWorker(entries, api_key, self.settings.ai_model, self.settings.ai_effort, self)
+        worker.progress.connect(
+            lambda done, total: self._toast_message("词根归类 %d / %d" % (done, total))
+        )
+        worker.done.connect(self._on_roots_done)
+        worker.failed.connect(self._on_roots_failed)
+        worker.finished.connect(lambda w=worker: self._drop_worker(w))
+        self._workers.append(worker)
+        worker.start()
+
+    def _on_roots_done(self, data):
+        matched = 0
+        changed = 0
+        roots = set()
+        for word in self._words:
+            info = data.get(word.word.strip().lower()) if isinstance(data, dict) else None
+            if not isinstance(info, dict):
+                continue
+            root = (info.get("root") or "").strip().lower()
+            if not root:
+                continue
+            matched += 1
+            roots.add(root)
+            root_cn = (info.get("root_cn") or "").strip()
+            if word.root == root and word.root_cn == root_cn:
+                continue
+            word.root = root
+            word.root_cn = root_cn
+            self.words_repo.update(word)
+            changed += 1
+        self.reload_all()
+        total = len(self._words)
+        if matched:
+            message = "已归类 %d 个单词，共 %d 个词根" % (matched, len(roots))
+            if changed != matched:
+                message += "（其中 %d 个是本次新写入）" % changed
+            message += "。"
+            rest = total - matched
+            if rest > 0:
+                message += "\n仍有 %d 个单词没有词根，可以再点一次让模型重新判断。" % rest
+        else:
+            message = "模型这次没有给出可用词根，%d 个单词仍保持未归类。" % total
+        self._toast_message("词根归类完成")
+        QMessageBox.information(self, "自动归类词根", message)
+
+    def _on_roots_failed(self, message: str) -> None:
+        QMessageBox.warning(self, "自动归类词根失败", message)
 
     def import_csv(self) -> None:
         path_text, _ = QFileDialog.getOpenFileName(self, "导入 CSV", "", "CSV / 文本 (*.csv *.txt)")

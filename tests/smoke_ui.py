@@ -5,6 +5,7 @@
 import os
 import sys
 import tempfile
+import time
 import traceback
 from pathlib import Path
 
@@ -193,7 +194,12 @@ def main() -> int:
     win._mini.toggle()
     app.processEvents()
     win.toggle_mini()
-    app.processEvents()
+    # 关闭是 150ms 的缩放淡出动画，等它真正 hide 再断言
+    for _ in range(40):
+        app.processEvents()
+        if not win._mini.isVisible():
+            break
+        time.sleep(0.02)
     check(not win._mini.isVisible(), "迷你窗已隐藏")
 
     print("[9] 搜索过滤与标签")

@@ -13,6 +13,9 @@ _ROOT_PATTERNS = [
 
 
 def extract_root(word: Word) -> str:
+    explicit = getattr(word, "root", "") or ""
+    if explicit.strip():
+        return explicit.strip().lower()
     for source in (
         (word.ai or {}).get("breakdown", "") if isinstance(word.ai, dict) else "",
         word.note,

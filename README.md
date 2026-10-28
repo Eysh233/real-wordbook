@@ -93,21 +93,3 @@ python tests/smoke_ui.py
 ## 许可
 
 个人学习用途。第三方库授权见 `requirements.txt` 注释。
-
-## 提交与推送
-
-本机直连 `github.com` 会被重置，已在本仓库 `.git/config` 内配置 HTTP 代理 `http://127.0.0.1:7897`（Clash 混合端口）。若代理端口变化：
-
-```bash
-git config --local http.proxy http://127.0.0.1:<PORT>
-# 或临时直连
-git config --local --unset http.proxy
-```
-
-首次推送需要 GitHub 身份认证（浏览器弹窗或 PAT），由本机 Credential Manager 记住：
-
-```bash
-git push -u origin main
-```
-
-之后每次 `git push` 不需要再输入。

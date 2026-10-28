@@ -16,6 +16,8 @@ class Word:
     meaning_cn: str
     phonetic: str = ""
     pos: str = ""
+    root: str = ""
+    root_cn: str = ""
     meaning_en: str = ""
     note: str = ""
     tags: List[str] = field(default_factory=list)
@@ -42,6 +44,8 @@ class Word:
             "meaning_cn": self.meaning_cn,
             "phonetic": self.phonetic,
             "pos": self.pos,
+            "root": self.root,
+            "root_cn": self.root_cn,
             "meaning_en": self.meaning_en,
             "note": self.note,
             "tags": list(self.tags),
@@ -84,6 +88,8 @@ class Word:
             meaning_cn=_s(data.get("meaning_cn")),
             phonetic=_s(data.get("phonetic")),
             pos=_s(data.get("pos")),
+            root=_s(data.get("root")),
+            root_cn=_s(data.get("root_cn")),
             meaning_en=_s(data.get("meaning_en")),
             note=_s(data.get("note")),
             tags=[str(t) for t in tags],
