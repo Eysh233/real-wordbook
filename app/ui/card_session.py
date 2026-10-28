@@ -104,7 +104,7 @@ class CardSession(QWidget):
         self._bar.setMaximum(max(1, len(self.items)))
         root.addWidget(self._bar)
 
-        root.addStretch(2)
+        root.addStretch(3)
 
         self._word = QLabel("")
         word_font = QFont(theme.SERIF)
@@ -157,7 +157,7 @@ class CardSession(QWidget):
         reveal_layout.addStretch(1)
         root.addWidget(reveal_box)
 
-        root.addStretch(4)
+        root.addStretch(2)
 
         actions = QHBoxLayout()
         actions.setSpacing(10)

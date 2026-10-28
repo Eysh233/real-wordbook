@@ -65,7 +65,7 @@ class ActionPopover(QFrame):
         close_btn.setFixedSize(24, 24)
         close_btn.setCursor(Qt.PointingHandCursor)
         close_btn.setStyleSheet(
-            "QPushButton { border: none; border-radius: 12px; color: %s; font-size: 16px; }"
+            "QPushButton { border: none; border-radius: 12px; padding: 0px; color: %s; font-size: 16px; }"
             "QPushButton:hover { background: rgba(127,110,88,30); }" % theme.css("ink_soft")
         )
         close_btn.clicked.connect(self.close_popover)
@@ -237,11 +237,16 @@ class ActionPopover(QFrame):
 
     def _fit_ai(self) -> None:
         """按内容高度调整 AI 面板，避免大片留白。"""
-        doc = self._ai.document()
-        doc.setTextWidth(max(200, WIDTH_AI - 70))
-        height = int(doc.size().height()) + 28
-        self._ai.setFixedHeight(max(theme.scale(96), min(theme.scale(300), height)))
         self.setFixedWidth(WIDTH_AI)
+        self._ai.setFixedWidth(WIDTH_AI - 36)
+        self._ai.ensurePolished()
+        doc = self._ai.document()
+        width = self._ai.viewport().width()
+        if width <= 0:
+            width = WIDTH_AI - 72
+        doc.setTextWidth(width)
+        height = int(doc.documentLayout().documentSize().height()) + 22
+        self._ai.setFixedHeight(max(theme.scale(88), min(theme.scale(300), height)))
         self.adjustSize()
         self._place()
 
