@@ -117,7 +117,7 @@ class CardSession(QWidget):
 
         self._word = QLabel("")
         word_font = QFont(theme.SERIF)
-        word_font.setPixelSize(theme.fs(36))
+        word_font.setPixelSize(theme.fs(48))
         word_font.setWeight(QFont.DemiBold)
         self._word.setFont(word_font)
         self._word.setAlignment(Qt.AlignCenter)
@@ -127,7 +127,7 @@ class CardSession(QWidget):
 
         self._phonetic = QLabel("")
         phon_font = QFont(theme.SERIF)
-        phon_font.setPixelSize(theme.fs(12))
+        phon_font.setPixelSize(theme.fs(13))
         phon_font.setItalic(True)
         self._phonetic.setFont(phon_font)
         self._phonetic.setAlignment(Qt.AlignCenter)
@@ -137,7 +137,7 @@ class CardSession(QWidget):
         root.addSpacing(theme.scale(8))
 
         reveal_box = QWidget(self._card)
-        reveal_box.setFixedHeight(theme.scale(104))
+        reveal_box.setFixedHeight(theme.scale(116))
         reveal_layout = QVBoxLayout(reveal_box)
         reveal_layout.setContentsMargins(0, 0, 0, 0)
         reveal_layout.setSpacing(8)
@@ -145,7 +145,7 @@ class CardSession(QWidget):
 
         self._meaning = QLabel("")
         mean_font = QFont(theme.SANS)
-        mean_font.setPixelSize(theme.fs(20))
+        mean_font.setPixelSize(theme.fs(22))
         self._meaning.setFont(mean_font)
         self._meaning.setAlignment(Qt.AlignCenter)
         self._meaning.setWordWrap(True)
@@ -155,7 +155,7 @@ class CardSession(QWidget):
 
         self._example = QLabel("")
         ex_font = QFont(theme.SERIF)
-        ex_font.setPixelSize(theme.fs(12))
+        ex_font.setPixelSize(theme.fs(13))
         ex_font.setItalic(True)
         self._example.setFont(ex_font)
         self._example.setAlignment(Qt.AlignCenter)
@@ -206,8 +206,8 @@ class CardSession(QWidget):
         root.addWidget(self._hint)
 
         self._veil_t = 1.0
-        self._base_w = 640
-        self._base_h = 400
+        self._base_w = 680
+        self._base_h = 430
         self.hide()
 
     # ---------------------------------------------------------------- 展示
@@ -413,8 +413,8 @@ class CardSession(QWidget):
 
     def resizeEvent(self, event):  # noqa: N802
         super().resizeEvent(event)
-        self._base_w = min(640, max(400, int(self.width() * 0.58)))
-        self._base_h = min(400, max(320, int(self.height() * 0.5)))
+        self._base_w = min(680, max(420, int(self.width() * 0.60)))
+        self._base_h = min(430, max(340, int(self.height() * 0.52)))
         if not self.isVisible():
             self._card.setGeometry(self._rect_for(1.0))
 
