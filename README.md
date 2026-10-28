@@ -77,6 +77,43 @@ python tests/seed_demo.py
 python tests/smoke_ui.py
 ```
 
+## 打包成 exe
+
+打包产物放在 `release/`，与 `build/` 一样**不入库**（`.gitignore` 已忽略）。推荐用 PyInstaller：本机装一次即可，一条命令出一个单文件 exe。
+
+```bash
+pip install pyinstaller          # 只装一次
+python tools/build_exe.py        # 产物：release/RealWordbook.exe（约 34 MB）
+```
+
+脚本等价于下面这条命令，逐个 `--exclude-module` 是为了把没用到的大模块（QtWebEngine / QtQml / numpy…）剔掉：
+
+```bash
+python -m PyInstaller --noconfirm --clean --onefile --windowed \
+  --name RealWordbook --distpath release --workpath build/pyinstaller \
+  --specpath build/pyinstaller --runtime-tmpdir . main.py
+```
+
+几个和打包相关的坑，文档化在这里：
+
+- **`--runtime-tmpdir .` 不是可选项**：onefile 默认把自身解包到 `%TEMP%\_MEIxxxx`，在受限环境里 bootloader 会直接报 `Could not create temporary directory!` 然后退出。指定 `.` 后改成解包到 exe 旁边，退出时自动清理。
+- **数据落在 exe 旁边**：`app/config.py` 里对 `sys.frozen` 做了判断，冻结状态下 `APP_DIR = Path(sys.executable).parent`，所以首次运行会在 exe 所在目录生成 `data/`、`StudyBook/`、`StudyRecord/`——而不是写进临时解包目录后丢失。
+- **看不到报错时**：把 `--windowed` 换成 `--console` 重新打包，就能在控制台读到 traceback（`tools/build_exe.py` 里改一行即可）。
+- **换图标 / 版本信息**：加 `--icon assets/app.ico`、`--version-file build/version.txt`。
+- exe 没有代码签名，首次运行可能被 SmartScreen 提示「已保护你的电脑」，选「更多信息 → 仍要运行」。
+
+### 几种打包方案的取舍
+
+| 方案 | 产物 | 启动速度 | 体积 | 适用场景 |
+| --- | --- | --- | --- | --- |
+| **PyInstaller `--onefile`（本项目采用）** | 单个 exe | 慢 1–3 秒（每次解包） | 约 34 MB | 想要「一个文件拷走就能用」 |
+| PyInstaller `--onedir` | 一个文件夹 + exe | 快（无需解包） | 约 60–80 MB（未压缩） | 自己长期用、追求启动速度 |
+| Nuitka（`--standalone`） | 文件夹或单文件 | 最快（编译成机器码） | 略小 | 想再快一点，但需要 MSVC 编译器、构建 10 分钟以上 |
+| cx_Freeze | 文件夹 | 中 | 中 | 需要更细的依赖控制时 |
+| py2exe | 文件夹 | 中 | 中 | 老项目遗留，Python 3.8 之后维护停滞，不推荐 |
+
+想换方案时只改 `tools/build_exe.py` 里的 `cmd` 列表，`README` 与产物路径不用动。
+
 ## 数据与密钥
 
 - **API Key 只存** `%USERPROFILE%\.real_wordbook\config.json`，或被环境变量 `DEEPSEEK_API_KEY` 覆盖；**永不写入仓库**。

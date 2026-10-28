@@ -3,6 +3,7 @@
 原则：所有路径与魔法数字集中在此，其它模块禁止散落字符串。
 """
 from pathlib import Path
+import sys
 
 # ---------------------------------------------------------------- 应用信息
 APP_NAME = "Real Wordbook"
@@ -10,7 +11,12 @@ APP_TITLE = "真实单词本"
 APP_VERSION = "0.1.0"
 
 # ---------------------------------------------------------------- 目录
-APP_DIR = Path(__file__).resolve().parent.parent
+# 打包成 exe 后 __file__ 指向临时解包目录，数据必须落在 exe 旁边，
+# 否则每次启动都会在 %TEMP% 里新建一份空的单词本。
+if getattr(sys, "frozen", False):
+    APP_DIR = Path(sys.executable).resolve().parent
+else:
+    APP_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = APP_DIR / "data"
 BOOKS_CACHE_DIR = DATA_DIR / "books"
 STUDYBOOK_DIR = APP_DIR / "StudyBook"
