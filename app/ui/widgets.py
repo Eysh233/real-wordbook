@@ -3,6 +3,7 @@ from typing import List, Sequence, Tuple
 
 from PyQt5.QtCore import (
     QEasingCurve,
+    QPoint,
     QPropertyAnimation,
     QRect,
     Qt,
@@ -10,8 +11,9 @@ from PyQt5.QtCore import (
     QVariantAnimation,
     pyqtSignal,
 )
-from PyQt5.QtGui import QColor, QPainter
+from PyQt5.QtGui import QColor, QFont, QPainter
 from PyQt5.QtWidgets import (
+    QApplication,
     QFrame,
     QGraphicsDropShadowEffect,
     QHBoxLayout,
@@ -246,3 +248,232 @@ class Chip(QLabel):
             "QLabel { background: rgba(127,110,88,26); color: %s; border-radius: 7px;"
             " padding: 2px 8px; font-size: %dpx; }" % (theme.css("ink_soft"), theme.fs(11))
         )
+
+
+class _TagRow(QWidget):
+    """标签菜单的一行：名称、数量、当前项圆点。悬停用淡底而不是换色。"""
+
+    def __init__(self, label: str, count: int, current: bool, parent=None) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_Hover, True)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setFixedHeight(theme.scale(30))
+        self.setMinimumWidth(theme.scale(170))
+        self._label = label
+        self._count = count
+        self._current = current
+        self._hover = False
+
+    def set_hover(self, hover: bool) -> None:
+        if self._hover != hover:
+            self._hover = hover
+            self.update()
+
+    def paintEvent(self, event):  # noqa: N802
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        box = self.rect().adjusted(4, 2, -4, -2)
+
+        if self._hover:
+            tint = QColor(theme.color("accent"))
+            tint.setAlpha(18)
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(tint)
+            painter.drawRoundedRect(box, 7, 7)
+
+        text_left = box.left() + theme.scale(9)
+        if self._current:
+            dot = QColor(theme.color("accent"))
+            painter.setPen(Qt.NoPen)
+            painter.setBrush(dot)
+            painter.drawEllipse(box.left() + theme.scale(2), box.center().y() - 2, 4, 4)
+            text_left += theme.scale(3)
+
+        f = QFont(theme.SANS)
+        f.setPixelSize(theme.fs(12))
+        f.setWeight(QFont.DemiBold if self._current else QFont.Normal)
+        painter.setFont(f)
+        painter.setPen(theme.color("ink" if (self._current or self._hover) else "ink_soft"))
+        text_rect = box.adjusted(int(text_left - box.left()), 0, -theme.scale(38), 0)
+        painter.drawText(
+            text_rect,
+            Qt.AlignLeft | Qt.AlignVCenter,
+            painter.fontMetrics().elidedText(self._label, Qt.ElideRight, text_rect.width()),
+        )
+
+        f2 = QFont(theme.SANS)
+        f2.setPixelSize(theme.fs(11))
+        painter.setFont(f2)
+        painter.setPen(theme.color("ink_faint"))
+        painter.drawText(
+            box.adjusted(0, 0, -theme.scale(9), 0), Qt.AlignRight | Qt.AlignVCenter, str(self._count)
+        )
+
+
+class _TagPopup(QFrame):
+    """菜单浮层：材质卡片 + 从按钮原点弹出 + 逐项错峰出现。"""
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent, Qt.Popup | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint)
+        self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self._rows: List[_TagRow] = []
+
+        self._panel = QFrame(self)
+        self._panel.setObjectName("tagPanel")
+        self._panel.setStyleSheet(
+            "QFrame#tagPanel { background: %s; border: 1px solid %s; border-radius: 12px; }"
+            % (theme.css("popover"), theme.css("rule"))
+        )
+        shadow = QGraphicsDropShadowEffect(self._panel)
+        shadow.setBlurRadius(theme.scale(22))
+        shadow.setOffset(0, theme.scale(6))
+        color = QColor(30, 24, 16)
+        color.setAlpha(90)
+        shadow.setColor(color)
+        self._panel.setGraphicsEffect(shadow)
+
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(theme.scale(8), theme.scale(8), theme.scale(8), theme.scale(8))
+        outer.addWidget(self._panel)
+
+        self._box = QVBoxLayout(self._panel)
+        self._box.setContentsMargins(theme.scale(4), theme.scale(5), theme.scale(4), theme.scale(5))
+        self._box.setSpacing(theme.scale(1))
+
+    def build(self, items: Sequence[Tuple[str, str, int]], current: str) -> None:
+        for row in self._rows:
+            row.setParent(None)
+            row.deleteLater()
+        self._rows = []
+
+        for value, label, count in items:
+            row = _TagRow(label, count, value == current, self._panel)
+            row.setProperty("tagValue", value)
+            row.installEventFilter(self)
+            row.setCursor(Qt.PointingHandCursor)
+            self._box.addWidget(row)
+            self._rows.append(row)
+        self.adjustSize()
+
+    def play_in(self) -> None:
+        motion.pop_in(self, (0.5, 0.0), start_scale=0.97, lift=6.0)
+
+
+class TagMenu(QPushButton):
+    """标签筛选：按钮 + 自绘菜单（替代 QComboBox）。点击从按钮下方弹出。"""
+
+    tagChanged = pyqtSignal(str)
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self.setObjectName("field")
+        self.setCursor(Qt.PointingHandCursor)
+        self.setMinimumWidth(theme.scale(96))
+        self.setMaximumWidth(theme.scale(152))
+        self._items: List[Tuple[str, str, int]] = [("", "全部标签", 0)]
+        self._value = ""
+        self._popup = None
+        self._style()
+        self._render_label()
+        self.clicked.connect(self._toggle)
+
+    # ------------------------------------------------------------------ 数据
+    def set_items(self, items: Sequence[Tuple[str, str, int]], keep: bool = True) -> None:
+        self._items = list(items) or [("", "全部标签", 0)]
+        values = [value for value, _label, _count in self._items]
+        if not keep or self._value not in values:
+            self._value = ""
+        self._render_label()
+
+    def value(self) -> str:
+        return self._value
+
+    def set_value(self, value: str, emit: bool = False) -> None:
+        values = [item[0] for item in self._items]
+        self._value = value if value in values else ""
+        self._render_label()
+        if emit:
+            self.tagChanged.emit(self._value)
+
+    def _render_label(self) -> None:
+        label = "全部标签"
+        for value, text, _count in self._items:
+            if value and value == self._value:
+                label = text
+                break
+        self.setText("%s  ▾" % label)
+
+    def _style(self) -> None:
+        self.setStyleSheet("font-size: %dpx;" % theme.fs(12))
+
+    # ------------------------------------------------------------------ 展开
+    def _toggle(self) -> None:
+        if self._popup is not None and self._popup.isVisible():
+            self._close()
+            return
+        self._open()
+
+    def _open(self) -> None:
+        window = self.window()
+        popup = _TagPopup(window)
+        popup.build(self._items, self._value)
+        self._popup = popup
+
+        size = popup.sizeHint()
+        origin = self.mapTo(window, QPoint(0, 0))
+        x = origin.x()
+        y = origin.y() + self.height() + theme.scale(6)
+        bottom = origin.y() + self.height()
+        if x + size.width() > window.width() - theme.scale(8):
+            x = max(theme.scale(8), window.width() - size.width() - theme.scale(8))
+        if y + size.height() > window.height() - theme.scale(8):
+            y = max(theme.scale(8), origin.y() - size.height() - theme.scale(6))
+        popup.move(int(x), int(y))
+        popup.show()
+        popup.setFocus()
+        popup.play_in()
+        self._hook(popup)
+
+    def _hook(self, popup: _TagPopup) -> None:
+        popup.keyPressEvent = lambda event: self._key(event, popup)  # type: ignore[assignment]
+        for row in popup._rows:
+            row.mousePressEvent = lambda event, r=row: self._pick(r)  # type: ignore[assignment]
+
+    def _pick(self, row: _TagRow) -> None:
+        value = row.property("tagValue") or ""
+        self._close()
+        if value != self._value:
+            self._value = value
+            self._render_label()
+            self.tagChanged.emit(self._value)
+
+    def _key(self, event, popup: _TagPopup) -> None:
+        key = event.key()
+        if key in (Qt.Key_Escape, Qt.Key_Tab):
+            self._close()
+            return
+        values = [str(row.property("tagValue") or "") for row in popup._rows]
+        if not values:
+            return
+        if key in (Qt.Key_Return, Qt.Key_Enter):
+            for row in popup._rows:
+                if (row.property("tagValue") or "") == self._value:
+                    self._pick(row)
+                    return
+            self._pick(popup._rows[0])
+            return
+        if key in (Qt.Key_Down, Qt.Key_Up):
+            index = values.index(self._value) if self._value in values else -1
+            step = 1 if key == Qt.Key_Down else -1
+            self._value = values[(index + step) % len(values)]
+            self._render_label()
+            for row in popup._rows:
+                row._current = (row.property("tagValue") or "") == self._value
+                row.update()
+
+    def _close(self) -> None:
+        popup = self._popup
+        self._popup = None
+        if popup is None:
+            return
+        motion.pop_out(popup, on_done=popup.close)

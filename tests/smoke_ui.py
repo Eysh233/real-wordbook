@@ -199,11 +199,11 @@ def main() -> int:
     print("[9] 搜索过滤与标签")
     win._on_nav("book")
     app.processEvents()
-    win.tag_combo.setCurrentIndex(win.tag_combo.findData("smoke"))
+    win.tag_combo.set_value("smoke", emit=True)
     win._refresh_words()
     app.processEvents()
     check(len(win._filtered()) == 3, "标签过滤到 3 词")
-    win.tag_combo.setCurrentIndex(0)
+    win.tag_combo.set_value("", emit=True)
     win._refresh_words()
     app.processEvents()
 

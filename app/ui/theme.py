@@ -188,8 +188,12 @@ def qss() -> str:
     QPushButton:disabled { color: %(ink_faint)s; }
     QPushButton#primary { background: %(accent)s; color: #FFF8EF; font-weight: 600; padding: 8px 16px; }
     QPushButton#primary:hover { background: %(accent)s; }
-    QPushButton#ghost { border: 1px solid %(rule)s; padding: 6px 12px; }
-    QPushButton#ghost:hover { background: %(paper_alt)s; }
+    QPushButton#ghost {
+        background: %(paper_alt)s; border: 1px solid %(rule)s; border-radius: 9px;
+        padding: 6px 12px;
+    }
+    QPushButton#ghost:hover { background: %(popover)s; border-color: %(accent)s; }
+    QPushButton::menu-indicator { image: none; width: 0px; height: 0px; }
     QPushButton#danger {
         color: %(danger)s; background: transparent; border: 1px solid %(danger)s;
         border-radius: 9px; padding: 6px 14px; font-weight: 600;
@@ -204,6 +208,13 @@ def qss() -> str:
     }
     QPushButton#link:hover { background: %(popover)s; border-color: %(accent)s; }
     QPushButton#link:pressed { background: %(accent_soft)s; }
+    /* 顶栏的「选择型」控件：看上去像一个小输入框，而不是一行字 */
+    QPushButton#field {
+        color: %(ink)s; background: %(paper_alt)s; border: 1px solid %(rule)s;
+        border-radius: 9px; padding: 6px 11px;
+    }
+    QPushButton#field:hover { border-color: %(accent)s; }
+    QPushButton#field:pressed { background: %(accent_soft)s; }
     QPushButton#soft {
         color: %(accent)s; background: %(accent_soft)s; border: 1px solid %(accent_soft)s;
         border-radius: 9px; padding: 6px 13px; font-weight: 600;

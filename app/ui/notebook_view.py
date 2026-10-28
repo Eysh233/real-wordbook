@@ -46,8 +46,11 @@ class NotebookView(QWidget):
         self._cells: List[WordCell] = []
         self._anim: Optional[QPropertyAnimation] = None
         self._effect: Optional[QGraphicsOpacityEffect] = None
-        self._turn_alpha = 1.0
-        self._turn_dx = 0
+        # 翻页分层：纸面 / 行与日期与词 / 页脚，各自不同的位移与先后
+        self._turn_mode = "idle"      # idle | out | in
+        self._turn_dir = 1
+        self._turn_p = 1.0
+        self._cells_hidden = False
         self._wheel_clock = QElapsedTimer()
         self._wheel_clock.start()
         self.setFocusPolicy(Qt.StrongFocus)
@@ -131,50 +134,85 @@ class NotebookView(QWidget):
         self.goto(self._index - 1)
 
     def _fade_to(self, target: int) -> None:
-        """翻页：旧页向侧向让位并淡出，新页从对侧轻微滑入。
+        """翻页：纸面、内容、页脚按不同幅度与先后错开，形成分层的方向感。
 
-        位移只作用在纸页内容上（绘制时平移），不移动整个控件——否则书桌
-        背景会跟着抖动，看起来像窗口在晃。
+        Apple 的「hint in the direction of the gesture」在这里落到三处：
+        要走的页内容先行、纸面随后；进来的页纸面先到、内容跟上来、页脚最后。
+        位移/淡入只发生在纸页绘制里，控件本身不动，书桌背景不会跟着晃。
         """
         direction = 1 if target > self._index else -1
         if self._anim is not None:
             self._anim.stop()
+        self._turn_dir = direction
+        self._hide_cells(True)
 
-        def animate(start_value, end_value, duration, curve, on_value, on_done=None):
+        def animate(duration, curve, on_value, on_done=None):
             anim = QVariantAnimation(self)
             anim.setDuration(motion.ms(duration))
-            anim.setStartValue(float(start_value))
-            anim.setEndValue(float(end_value))
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
             anim.setEasingCurve(curve)
-            anim.valueChanged.connect(on_value)
+            anim.valueChanged.connect(lambda v: on_value(float(v)))
             if on_done is not None:
                 anim.finished.connect(on_done)
             anim.start()
             self._anim = anim
 
         def on_out(value):
-            value = float(value)
-            self._turn_alpha = value
-            self._turn_dx = -14 * direction * (1.0 - value)
+            self._turn_mode = "out"
+            self._turn_p = value
             self.update()
 
         def switch():
             self._index = target
             self._rebuild_cells()
-            animate(0.0, 1.0, motion.PAGE_MS, motion.EASE_OUT, on_in, self._clear_turn)
+            self.pageChanged.emit(self.page_number(), len(self._pages))
+            animate(motion.PAGE_MS, motion.EASE_OUT, on_in, self._clear_turn)
 
         def on_in(value):
-            value = float(value)
-            self._turn_alpha = value
-            self._turn_dx = 18 * direction * (1.0 - value)
+            self._turn_mode = "in"
+            self._turn_p = value
             self.update()
 
-        animate(1.0, 0.0, 110, motion.EASE_IN, on_out, switch)
+        animate(110, motion.EASE_IN, on_out, switch)
+
+    # ------------------------------------------------------------ 分层进度
+    @staticmethod
+    def _clamp01(value: float) -> float:
+        return 0.0 if value < 0.0 else (1.0 if value > 1.0 else value)
+
+    def _layer_progress(self, layer: str) -> float:
+        """返回某一层当前的完成度 0..1；idle 时恒为 1。"""
+        if self._turn_mode == "idle":
+            return 1.0
+        p = self._turn_p
+        if self._turn_mode == "out":
+            # 内容先走，纸面与页脚后走
+            delay = {"content": 0.0, "footer": 0.18, "paper": 0.3}.get(layer, 0.0)
+        else:
+            # 纸面先到，内容随后，页脚最后落定
+            delay = {"paper": 0.0, "content": 0.16, "footer": 0.34}.get(layer, 0.0)
+        span = max(0.001, 1.0 - delay)
+        return self._clamp01((p - delay) / span)
+
+    def _layer_tint(self, layer: str) -> tuple:
+        """返回 (透明度, 水平位移)。"""
+        progress = self._layer_progress(layer)
+        strength = progress if self._turn_mode == "in" else 1.0 - progress
+        amplitude = {"paper": 9.0, "content": 20.0, "footer": 5.0}.get(layer, 12.0)
+        return progress, -self._turn_dir * amplitude * (1.0 - progress)
+
+    def _hide_cells(self, hidden: bool) -> None:
+        if self._cells_hidden == hidden:
+            return
+        self._cells_hidden = hidden
+        for cell in self._cells:
+            cell.setVisible(not hidden)
 
     def _clear_turn(self) -> None:
-        self._turn_alpha = 1.0
-        self._turn_dx = 0
-        self._anim = None
+        self._turn_mode = "idle"
+        self._turn_p = 1.0
+        self._hide_cells(False)
         self.update()
 
     # ---------------------------------------------------------------- 布局
@@ -265,10 +303,45 @@ class NotebookView(QWidget):
     def paintEvent(self, event):  # noqa: N802
         painter = QPainter(self)
         painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.TextAntialiasing, True)
         painter.fillRect(self.rect(), theme.color("desk"))
-        if self._turn_alpha < 1.0 or self._turn_dx:
-            painter.setOpacity(max(0.0, min(1.0, self._turn_alpha)))
-            painter.translate(self._turn_dx, 0)
+
+        page = self._pages[self._index] if self._pages else None
+        turning = self._turn_mode != "idle"
+
+        # 翻页分三层走：纸面最先/最后、内容跟着、页脚收尾。
+        # 每层单独 save/restore，透明度与位移互不影响，也不会让书桌背景抖动。
+        alpha, dx = self._layer_tint("paper")
+        painter.save()
+        painter.setOpacity(alpha)
+        painter.translate(dx, 0)
+        self._paint_sheet(painter)
+        painter.restore()
+
+        alpha, dx = self._layer_tint("content")
+        painter.save()
+        painter.setOpacity(alpha)
+        painter.translate(dx, 0)
+        if page:
+            self._paint_rows(painter, page)
+            if turning:
+                # 翻页期间词格控件被隐藏，这里直接画一遍，省掉 30 个控件的跟随动画
+                self._paint_words(painter, page)
+        else:
+            self._paint_empty(painter)
+        painter.restore()
+
+        if page:
+            alpha, dx = self._layer_tint("footer")
+            painter.save()
+            painter.setOpacity(alpha)
+            painter.translate(dx, 0)
+            self._paint_footer(painter)
+            painter.restore()
+
+        painter.end()
+
+    def _paint_sheet(self, painter: QPainter) -> None:
         paper = self._paper_rect()
 
         # 投影 + 纸面
@@ -318,13 +391,62 @@ class NotebookView(QWidget):
             QRectF(content.left() - 12, content.top() - 4, 1, content.height() + 4).bottomLeft(),
         )
 
-        page = self._pages[self._index] if self._pages else None
-        if page:
-            self._paint_rows(painter, page)
-            self._paint_footer(painter)
-        else:
-            self._paint_empty(painter)
-        painter.end()
+    def _paint_words(self, painter: QPainter, page: paging.Page) -> None:
+        """翻页过渡期用的轻量词条绘制（与 WordCell 的排版对齐）。"""
+        content, _row_h, col_w, gap = self._metrics()
+
+        f_word = QFont(theme.SERIF)
+        f_word.setPixelSize(theme.fs(17 if self._mode != config.DISPLAY_CN else 16))
+        f_word.setWeight(QFont.DemiBold)
+        f_word.setLetterSpacing(QFont.AbsoluteSpacing, 0.4)
+
+        f_mean = QFont(theme.SANS)
+        f_mean.setPixelSize(theme.fs(11 if self._mode != config.DISPLAY_CN else 15))
+
+        for slot, y0, h in self._slot_bands(page):
+            if slot.kind != "words":
+                continue
+            cell_h = max(40, int(h - theme.scale(9)))
+            for col, word in enumerate(slot.words):
+                x = content.left() + col * (col_w + gap)
+                box = QRectF(x + 4, y0 + theme.scale(3) + 1, col_w - 8, cell_h - 2)
+                left = box.left() + 7
+                text_width = max(20.0, box.width() - 14)
+                seed = abs(hash(word.id or word.word)) % 100000
+
+                painter.setFont(f_word)
+                word_text = painter.fontMetrics().elidedText(word.word, Qt.ElideRight, int(text_width))
+                word_h = painter.fontMetrics().height()
+                word_rect = QRectF(left, box.top() + theme.scale(8), min(text_width, painter.fontMetrics().width(word_text) + 6), word_h)
+
+                painter.setFont(f_mean)
+                mean_text = painter.fontMetrics().elidedText(word.meaning_cn, Qt.ElideRight, int(text_width))
+                mean_h = painter.fontMetrics().height()
+                mean_rect = QRectF(left, box.top() + theme.scale(40), min(text_width, painter.fontMetrics().width(mean_text) + 6), mean_h)
+
+                if word.highlight:
+                    painter.setOpacity(0.86)
+                    if self._mode != config.DISPLAY_CN:
+                        painter_utils.draw_highlight(painter, word_rect.adjusted(-2, -2, 4, 2), theme.highlight_color(), seed)
+                    if self._mode != config.DISPLAY_EN:
+                        painter_utils.draw_highlight(painter, mean_rect.adjusted(-2, -1, 4, 1), theme.highlight_color(), seed + 3)
+                    painter.setOpacity(1.0)
+
+                if self._mode != config.DISPLAY_CN:
+                    painter.setFont(f_word)
+                    painter.setPen(theme.color("ink"))
+                    painter.drawText(word_rect, Qt.AlignLeft | Qt.AlignVCenter, word_text)
+                if self._mode != config.DISPLAY_EN:
+                    painter.setFont(f_mean)
+                    painter.setPen(theme.color("ink_soft"))
+                    painter.drawText(mean_rect, Qt.AlignLeft | Qt.AlignVCenter, mean_text)
+
+                if word.strike:
+                    painter_utils.draw_strike(
+                        painter, word_rect.left() - 2, word_rect.right() + 2,
+                        (word_rect.center().y() if self._mode != config.DISPLAY_CN else mean_rect.center().y()),
+                        theme.strike_color(), seed,
+                    )
 
     def _paint_rows(self, painter: QPainter, page: paging.Page) -> None:
         content, _row_h, _col_w, _gap = self._metrics()

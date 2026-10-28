@@ -42,7 +42,7 @@ from .mini_window import MiniWindow
 from .notebook_view import NotebookView
 from .settings_dialog import SettingsDialog
 from .stats_page import StatsPage
-from .widgets import Segmented, Toast
+from .widgets import Segmented, TagMenu, Toast
 
 PAGE_BOOK = 0
 PAGE_STUDY = 1
@@ -138,10 +138,7 @@ class MainWindow(QMainWindow):
         self.search.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         bar.addWidget(self.search)
 
-        self.tag_combo = QComboBox(topbar)
-        self.tag_combo.setMinimumWidth(theme.scale(84))
-        self.tag_combo.setMaximumWidth(theme.scale(112))
-        self.tag_combo.addItem("全部标签", "")
+        self.tag_combo = TagMenu(topbar)
         bar.addWidget(self.tag_combo)
 
         self.mode = Segmented(
@@ -221,7 +218,7 @@ class MainWindow(QMainWindow):
         self.nav.changed.connect(self._on_nav)
         self.mode.changed.connect(self._on_mode)
         self.search.textChanged.connect(lambda _t: self._search_timer.start())
-        self.tag_combo.currentIndexChanged.connect(lambda _i: self._refresh_words())
+        self.tag_combo.tagChanged.connect(lambda _value: self._refresh_words())
 
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
@@ -261,7 +258,7 @@ class MainWindow(QMainWindow):
         """主题/字号一变就整体重建：控件的颜色和字号都是在构造时从 token 取的。"""
         page = self.stack.currentIndex()
         query = self.search.text()
-        tag = self.tag_combo.currentData()
+        tag = self.tag_combo.value()
         mode = self.mode.value()
 
         self._close_popover()
@@ -280,9 +277,7 @@ class MainWindow(QMainWindow):
         self.mode.set_value(mode, emit=False)
         self.view.set_mode(mode)
         self.search.setText(query)
-        index = self.tag_combo.findData(tag)
-        if index > 0:
-            self.tag_combo.setCurrentIndex(index)
+        self.tag_combo.set_value(tag)
         self.stack.setCurrentIndex(page)
         self._on_nav(("book", "study", "stats")[page])
 
@@ -304,19 +299,19 @@ class MainWindow(QMainWindow):
         self._refresh_stats()
 
     def _refresh_tags(self) -> None:
-        current = self.tag_combo.currentData()
-        self.tag_combo.blockSignals(True)
-        self.tag_combo.clear()
-        self.tag_combo.addItem("全部标签", "")
+        counts: Dict[str, int] = {}
+        for word in self.words_repo.all():
+            for tag in word.tags:
+                if tag:
+                    counts[tag] = counts.get(tag, 0) + 1
+        items = [("", "全部标签", len(self.words_repo.all()))]
         for tag in self.words_repo.tags():
-            self.tag_combo.addItem(tag, tag)
-        index = self.tag_combo.findData(current)
-        self.tag_combo.setCurrentIndex(index if index >= 0 else 0)
-        self.tag_combo.blockSignals(False)
+            items.append((tag, tag, counts.get(tag, 0)))
+        self.tag_combo.set_items(items, keep=True)
 
     def _filtered(self) -> List[Word]:
         keyword = self.search.text().strip().lower()
-        tag = self.tag_combo.currentData()
+        tag = self.tag_combo.value()
         result: List[Word] = []
         for word in self.words_repo.sorted_words():
             if tag and tag not in word.tags:
