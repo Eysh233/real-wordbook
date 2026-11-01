@@ -19,6 +19,7 @@ from PyQt5.QtCore import (
 from PyQt5.QtGui import QColor, QPainter, QPen
 from PyQt5.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
+from .. import config
 from ..models import Word
 from . import motion, theme
 
@@ -104,11 +105,23 @@ class MiniWindow(QWidget):
         root.addLayout(row)
 
         self._timer = QTimer(self)
-        self._timer.setInterval(14000)
+        self._timer.setInterval(config.MINI_INTERVAL_DEFAULT * 1000)
         self._timer.timeout.connect(self.next_word)
         self.hide()
 
     # ---------------------------------------------------------------- 数据
+    def set_interval(self, seconds: int) -> None:
+        """改自动换词的间隔（秒）。计时器在跑就按新间隔重新起算。"""
+        seconds = max(config.MINI_INTERVAL_MIN, min(config.MINI_INTERVAL_MAX, int(seconds)))
+        self._interval = seconds
+        if self._timer.interval() == seconds * 1000:
+            return
+        self._timer.setInterval(seconds * 1000)
+        if self._timer.isActive():
+            self._timer.start()  # 重新计时，避免沿用旧间隔剩下的时间
+
+    def interval(self) -> int:
+        return max(1, self._timer.interval() // 1000)
     def set_words(self, words: List[Word]) -> None:
         self._words = list(words)
         random.shuffle(self._words)

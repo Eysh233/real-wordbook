@@ -21,6 +21,10 @@ from ..models import Settings
 from ..repositories import SecretRepo
 from . import theme
 
+# 右侧数值标签的固定宽度（逻辑像素，随字号缩放）：
+# 「字号」与「悬浮窗换词间隔」共用，保证两根滑块长度一致、数值变化时也不抖动。
+VALUE_LABEL_W = 45
+
 
 class SettingsDialog(QDialog):
     def __init__(
@@ -102,9 +106,12 @@ class SettingsDialog(QDialog):
         self._scale = QSlider(Qt.Horizontal, self)
         self._scale.setRange(85, 140)
         self._scale.setValue(int(round(settings.font_scale * 100)))
-        self._scale_label = QLabel("%d%%" % self._scale.value())
+        self._scale_label = QLabel("%d %%" % self._scale.value())
         self._scale_label.setObjectName("faint")
-        self._scale.valueChanged.connect(lambda value: self._scale_label.setText("%d%%" % value))
+        # 固定宽度：百分比从「99%」跳到「100%」时不再把滑块挤短
+        self._scale_label.setFixedWidth(theme.scale(VALUE_LABEL_W))
+        self._scale_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._scale.valueChanged.connect(lambda value: self._scale_label.setText("%d %%" % value))
         scale_row.addWidget(self._scale, 1)
         scale_row.addWidget(self._scale_label)
         root.addWidget(self._labeled("字号", scale_row))
@@ -112,6 +119,28 @@ class SettingsDialog(QDialog):
         self._reduced = QCheckBox("减少动效（关闭翻页淡入与卡片过渡）", self)
         self._reduced.setChecked(settings.reduced_motion)
         root.addWidget(self._reduced)
+
+        mini_row = QHBoxLayout()
+        mini_row.setSpacing(10)
+        self._mini_interval = QSlider(Qt.Horizontal, self)
+        self._mini_interval.setRange(config.MINI_INTERVAL_MIN, config.MINI_INTERVAL_MAX)
+        self._mini_interval.setValue(
+            max(
+                config.MINI_INTERVAL_MIN,
+                min(config.MINI_INTERVAL_MAX, int(settings.mini_interval or config.MINI_INTERVAL_DEFAULT)),
+            )
+        )
+        self._mini_interval_label = QLabel("%d 秒" % self._mini_interval.value())
+        self._mini_interval_label.setObjectName("faint")
+        # 与字号那一行用同一个固定宽度，两根滑块的右端才能对齐
+        self._mini_interval_label.setFixedWidth(theme.scale(VALUE_LABEL_W))
+        self._mini_interval_label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self._mini_interval.valueChanged.connect(
+            lambda value: self._mini_interval_label.setText("%d 秒" % value)
+        )
+        mini_row.addWidget(self._mini_interval, 1)
+        mini_row.addWidget(self._mini_interval_label)
+        root.addWidget(self._labeled("悬浮窗换词间隔", mini_row))
 
         note = QLabel(
             "提示：AI 解释会把单词与已填中文发送给 DeepSeek；同一单词 + 同一模型的解释会缓存，避免重复计费。"
@@ -237,6 +266,7 @@ class SettingsDialog(QDialog):
         self._settings.display_mode = self._display.currentData() or config.DISPLAY_BOTH
         self._settings.font_scale = self._scale.value() / 100.0
         self._settings.reduced_motion = self._reduced.isChecked()
+        self._settings.mini_interval = int(self._mini_interval.value())
         self.accept()
 
     def result_settings(self) -> Settings:

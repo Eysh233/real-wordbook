@@ -216,6 +216,7 @@ class Settings:
     font_scale: float = 1.0
     ai_model: str = "deepseek-flash"
     ai_effort: str = "low"
+    mini_interval: int = 14  # 秒：桌面悬浮窗自动换词的间隔
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -225,6 +226,7 @@ class Settings:
             "font_scale": self.font_scale,
             "ai_model": self.ai_model,
             "ai_effort": self.ai_effort,
+            "mini_interval": self.mini_interval,
         }
 
     @classmethod
@@ -233,6 +235,10 @@ class Settings:
             scale = float(data.get("font_scale", 1.0) or 1.0)
         except (TypeError, ValueError):
             scale = 1.0
+        try:
+            interval = int(data.get("mini_interval", 14) or 14)
+        except (TypeError, ValueError):
+            interval = 14
         return cls(
             display_mode=_s(data.get("display_mode"), "both"),
             theme=_s(data.get("theme"), "paper"),
@@ -240,4 +246,5 @@ class Settings:
             font_scale=max(0.85, min(1.4, scale)),
             ai_model=_s(data.get("ai_model"), "deepseek-flash"),
             ai_effort=_s(data.get("ai_effort"), "low"),
+            mini_interval=max(3, min(120, interval)),
         )

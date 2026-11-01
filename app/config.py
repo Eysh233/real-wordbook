@@ -64,6 +64,11 @@ AI_PROMPT_VERSION = 1
 AI_TIMEOUT = 30
 AI_MAX_TOKENS = 900
 
+# ---------------------------------------------------------------- 迷你悬浮窗
+MINI_INTERVAL_DEFAULT = 15  # 秒：多久自动换一个词
+MINI_INTERVAL_MIN = 5
+MINI_INTERVAL_MAX = 180
+
 # ---------------------------------------------------------------- 记忆曲线（F1）
 SRS_INTERVALS = [1, 3, 7, 15, 30, 60]
 

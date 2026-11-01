@@ -912,9 +912,11 @@ class MainWindow(QMainWindow):
         if self._mini is None:
             self._mini = MiniWindow(self)
             self._mini.openMain.connect(self._restore_from_mini)
+            self._mini.set_interval(self.settings.mini_interval)
         if self._mini.isVisible():
             self._mini.hide_window()
             return
+        self._mini.set_interval(self.settings.mini_interval)
         self._mini.set_words([w for w in self._words if w.word])
         self._mini.show_window()
 
@@ -944,6 +946,8 @@ class MainWindow(QMainWindow):
         self.settings = new_settings
         self.settings_repo.settings = new_settings
         self.settings_repo.save()
+        if self._mini is not None:
+            self._mini.set_interval(new_settings.mini_interval)
         self.mode.set_value(new_settings.display_mode, emit=False)
         self.view.set_mode(new_settings.display_mode)
         self._rebuild_ui()
